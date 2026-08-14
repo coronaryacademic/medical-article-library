@@ -1,23 +1,26 @@
 // ==UserScript==
 // @name         Coursology Deep Article Extractor (With Figures & Tables)
 // @namespace    http://tampermonkey.net/
-// @version      30.0
+// @version      32.1
 // @description  Clicks each figure/table popup to capture dynamic content, then exports as clean Markdown.
 // @match        *://*/*
 // @include      http://*/*
 // @include      https://*/*
+// @connect      cdn.coursology-qbank.com
+// @connect      *
 // @require      https://unpkg.com/turndown/dist/turndown.js
 // @require      https://unpkg.com/turndown-plugin-gfm/dist/turndown-plugin-gfm.js
 // @require      https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js
 // @grant        GM_setClipboard
 // @grant        GM_registerMenuCommand
+// @grant        GM_xmlhttpRequest
 // @run-at       document-idle
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v30.0';
+    const SCRIPT_VERSION = 'v32.0 (CORS-Bypass Embedded)';
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -45,6 +48,69 @@
     // Helper sleep function
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // ─── Convert Canvas / Image element to Data URL ─────────────────────────
+    function convertViaCanvas(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width || 600;
+                    canvas.height = img.naturalHeight || img.height || 400;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    resolve(canvas.toDataURL('image/png'));
+                } catch (e) {
+                    resolve(url);
+                }
+            };
+            img.onerror = () => resolve(url);
+            img.src = url;
+        });
+    }
+
+    // ─── Fetch image URL → base64 data URI (Bypasses CORS via GM_xmlhttpRequest) ─
+    function imgUrlToBase64(url) {
+        if (!url || url.startsWith('data:')) return Promise.resolve(url);
+
+        return new Promise((resolve) => {
+            // Priority 1: Tampermonkey GM_xmlhttpRequest (Bypasses CORS entirely)
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: url,
+                    responseType: 'blob',
+                    onload: function(response) {
+                        if (response.status >= 200 && response.status < 300 && response.response) {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = async () => resolve(await convertViaCanvas(url));
+                            reader.readAsDataURL(response.response);
+                        } else {
+                            convertViaCanvas(url).then(resolve);
+                        }
+                    },
+                    onerror: function() {
+                        convertViaCanvas(url).then(resolve);
+                    }
+                });
+                return;
+            }
+
+            // Priority 2: Standard fetch fallback
+            fetch(url, { mode: 'cors', credentials: 'include' })
+                .then(res => res.blob())
+                .then(blob => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = async () => resolve(await convertViaCanvas(url));
+                    reader.readAsDataURL(blob);
+                })
+                .catch(async () => resolve(await convertViaCanvas(url)));
+        });
     }
 
     // ─── Turndown Config ────────────────────────────────────────────────────
@@ -266,9 +332,11 @@
                 }
             } else if (newImg) {
                 const absSrc = new URL(newImg.getAttribute('src') || newImg.src, window.location.href).href;
-                capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText });
-                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText });
-                console.log(`[Coursology Extractor] Captured figure image for ${btnText}: ${absSrc}`);
+                console.log(`[Coursology Extractor] Fetching & embedding image for ${btnText}: ${absSrc}`);
+                const base64Src = await imgUrlToBase64(absSrc);
+                capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText });
+                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText });
+                console.log(`[Coursology Extractor] Embedded figure image for ${btnText} (${base64Src.slice(0, 40)}...)`);
             } else {
                 console.log(`[Coursology Extractor] No popup table or image found in DOM for ${btnText}. Checking container fallback...`);
             }
@@ -279,9 +347,11 @@
                 const containerHtml = btnContainer ? btnContainer.outerHTML : '';
                 const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|webp|gif|svg)/i);
                 if (cdnMatch) {
-                    capturedPngMap.set(btn.id, { imgSrc: cdnMatch[0], btnText });
-                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: cdnMatch[0], btnText });
-                    console.log(`[Coursology Extractor] CDN URL extracted from container for ${btnText}: ${cdnMatch[0]}`);
+                    console.log(`[Coursology Extractor] Fetching & embedding CDN fallback for ${btnText}: ${cdnMatch[0]}`);
+                    const base64Src = await imgUrlToBase64(cdnMatch[0]);
+                    capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText });
+                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText });
+                    console.log(`[Coursology Extractor] Embedded CDN fallback for ${btnText} (${base64Src.slice(0, 40)}...)`);
                 } else {
                     console.warn(`[Coursology Extractor] Nothing captured for: ${btnText}`);
                 }
@@ -365,8 +435,9 @@
             if (captured && captured.imgDataUrl) imgSrc = captured.imgDataUrl;
             else if (captured && captured.imgSrc) imgSrc = captured.imgSrc;
             else if (pageMediaUrls[imgFallbackIdx]) {
-                imgSrc = new URL(pageMediaUrls[imgFallbackIdx], window.location.href).href;
+                const rawFallbackUrl = new URL(pageMediaUrls[imgFallbackIdx], window.location.href).href;
                 imgFallbackIdx++;
+                imgSrc = await imgUrlToBase64(rawFallbackUrl);
             }
 
             if (imgSrc) {
@@ -385,14 +456,19 @@
 
         document.getElementById('coursology-overlay')?.remove();
 
-        // 5. Fix all remaining image URLs
-        clone.querySelectorAll('img').forEach(img => {
+        // 5. Convert all remaining images in clone to offline base64 data URIs
+        const remainingImgs = Array.from(clone.querySelectorAll('img'));
+        for (const img of remainingImgs) {
             const src = img.getAttribute('src') || img.getAttribute('data-src') || img.src;
             if (src && !src.startsWith('data:')) {
-                img.src = new URL(src, window.location.href).href;
+                const absUrl = new URL(src, window.location.href).href;
+                console.log(`[Coursology Extractor] Embedding inline article image as base64: ${absUrl}`);
+                const b64 = await imgUrlToBase64(absUrl);
+                img.src = b64;
                 img.removeAttribute('srcset');
+                img.removeAttribute('data-src');
             }
-        });
+        }
 
         // 6. Convert to Markdown
         let markdownBody = turndownService.turndown(clone.innerHTML);

@@ -7,8 +7,69 @@ if (typeof marked !== 'undefined') {
   });
 }
 
-// Local Storage Key
-const STORAGE_KEY = 'coursology_markdown_articles_db';
+// IndexedDB config (replaces localStorage — no size limit)
+const DB_NAME = 'CoursologyLibrary';
+const DB_VERSION = 1;
+const STORE_NAME = 'articles';
+const STORAGE_KEY = 'coursology_markdown_articles_db'; // kept for localStorage migration
+const INITIALIZED_KEY = 'coursology_library_initialized';
+
+let _db = null;
+
+function openDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = (e) => { _db = e.target.result; resolve(_db); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbGetAll() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbPut(article) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const req = tx.objectStore(STORE_NAME).put(article);
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbDelete(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const req = tx.objectStore(STORE_NAME).delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbClear() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const req = tx.objectStore(STORE_NAME).clear();
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
 
 // Application State
 let articles = [];
@@ -73,12 +134,12 @@ const lightboxCounter = document.getElementById('lightbox-counter');
 const lightboxPrev = document.getElementById('lightbox-prev');
 const lightboxNext = document.getElementById('lightbox-next');
 
-// Initialize Application
-function init() {
+// Initialize Application (async — IndexedDB requires awaiting)
+async function init() {
   if (typeof marked !== 'undefined') {
     marked.setOptions({ html: true, breaks: true, gfm: true });
   }
-  loadArticles();
+  await loadArticles();
   setupEventListeners();
   setupPanAndZoom();
   setupWindowControls();
@@ -90,26 +151,35 @@ function init() {
   }
 }
 
-// Local Storage Keys
-const INITIALIZED_KEY = 'coursology_library_initialized';
-
-// Load articles from localStorage (with default sample ONLY on first run ever)
-function loadArticles() {
-  const isInitialized = localStorage.getItem(INITIALIZED_KEY);
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  if (saved !== null) {
-    try {
-      articles = JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to parse saved articles:', e);
-      articles = [];
+// Load articles from IndexedDB (migrates from localStorage on first upgrade)
+async function loadArticles() {
+  try {
+    // One-time migration: if old localStorage data exists, import it into IndexedDB
+    const oldData = localStorage.getItem(STORAGE_KEY);
+    if (oldData) {
+      try {
+        const oldArticles = JSON.parse(oldData);
+        for (const a of oldArticles) { await dbPut(a); }
+        localStorage.removeItem(STORAGE_KEY);
+        console.log('[Coursology] Migrated', oldArticles.length, 'articles from localStorage → IndexedDB');
+      } catch (e) {
+        console.warn('[Coursology] localStorage migration failed:', e);
+      }
     }
-  } else if (!isInitialized) {
-    // Only load initial sample articles on absolute first app launch
-    articles = [getSampleArticle(), getSampleArticle2()];
-    localStorage.setItem(INITIALIZED_KEY, 'true');
-    saveArticles();
+
+    articles = await dbGetAll();
+    // Sort newest first (matching original order)
+    articles.sort((a, b) => (b.id > a.id ? 1 : -1));
+
+    // Seed sample articles only on absolute first launch
+    if (articles.length === 0 && !localStorage.getItem(INITIALIZED_KEY)) {
+      articles = [getSampleArticle(), getSampleArticle2()];
+      localStorage.setItem(INITIALIZED_KEY, 'true');
+      for (const a of articles) { await dbPut(a); }
+    }
+  } catch (e) {
+    console.error('[Coursology] Failed to load articles from IndexedDB:', e);
+    articles = [];
   }
 }
 
@@ -237,9 +307,19 @@ Chest radiography in tamponade demonstrates cardiomegaly with a classic "water-b
   };
 }
 
-// Save articles to localStorage
-function saveArticles() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
+// Save a single article to IndexedDB (called per-article, not full array dump)
+async function saveArticles(articleToSave) {
+  try {
+    if (articleToSave) {
+      await dbPut(articleToSave);
+    } else {
+      // Full re-sync: put all current articles
+      for (const a of articles) { await dbPut(a); }
+    }
+  } catch (e) {
+    console.error('[Coursology] IndexedDB save failed:', e);
+    alert('Warning: Could not save article to local storage. IndexedDB error: ' + e.message);
+  }
   renderSidebar();
 }
 
@@ -357,17 +437,17 @@ async function handleClipboardPaste() {
       return;
     }
 
-    parseAndAddMarkdown(text);
+    await parseAndAddMarkdown(text);
   } catch (err) {
     const manualText = prompt('Paste your copied Markdown text here:');
     if (manualText) {
-      parseAndAddMarkdown(manualText);
+      await parseAndAddMarkdown(manualText);
     }
   }
 }
 
 // Parse Markdown frontmatter & clean body
-function parseAndAddMarkdown(mdText) {
+async function parseAndAddMarkdown(mdText) {
   let title = 'Medical Article';
   let date = new Date().toLocaleDateString();
 
@@ -385,7 +465,7 @@ function parseAndAddMarkdown(mdText) {
     markdown: cleanMarkdown
   };
 
-  addArticle(articleObj);
+  await addArticle(articleObj);
 }
 
 // Handle File Input (.md files)
@@ -393,15 +473,15 @@ function handleFileInput(e) {
   const files = Array.from(e.target.files);
   files.forEach(file => {
     const reader = new FileReader();
-    reader.onload = (event) => {
-      parseAndAddMarkdown(event.target.result);
+    reader.onload = async (event) => {
+      await parseAndAddMarkdown(event.target.result);
     };
     reader.readAsText(file);
   });
 }
 
 // Add or update article
-function addArticle(articleData, autoSave = true) {
+async function addArticle(articleData, autoSave = true) {
   const existingIdx = articles.findIndex(a => a.title === articleData.title);
   if (existingIdx >= 0) {
     articles[existingIdx] = articleData;
@@ -409,7 +489,7 @@ function addArticle(articleData, autoSave = true) {
     articles.unshift(articleData);
   }
 
-  if (autoSave) saveArticles();
+  if (autoSave) await saveArticles(articleData);
   displayArticle(articleData.id);
 }
 
@@ -1377,11 +1457,12 @@ function deleteArticle(id) {
 }
 
 // Clear All Articles
-function handleClearAll() {
+async function handleClearAll() {
   if (confirm('Are you sure you want to delete all saved articles?')) {
     articles = [];
     activeArticleId = null;
-    saveArticles();
+    await dbClear();
+    renderSidebar();
     welcomeState.classList.remove('hidden');
     articleContent.classList.add('hidden');
     if (mediaSidebar) mediaSidebar.classList.add('hidden');
