@@ -50,8 +50,8 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // ─── Image Compression Helper (Reduces base64 size by 80-90%) ────────────
-    function compressImageDataUrl(dataUrl, maxDimension = 1400, quality = 0.8) {
+    // ─── Image Compression Helper (Reduces base64 size by 90-95%) ────────────
+    function compressImageDataUrl(dataUrl, maxDimension = 1100, quality = 0.70) {
         return new Promise((resolve) => {
             if (!dataUrl || !dataUrl.startsWith('data:image')) {
                 return resolve(dataUrl);
@@ -96,13 +96,14 @@
             img.onload = () => {
                 try {
                     const canvas = document.createElement('canvas');
-                    canvas.width = img.naturalWidth || img.width || 600;
-                    canvas.height = img.naturalHeight || img.height || 400;
+                    canvas.width = Math.min(img.naturalWidth || img.width || 600, 1100);
+                    const scaleRatio = canvas.width / (img.naturalWidth || img.width || 600);
+                    canvas.height = Math.round((img.naturalHeight || img.height || 400) * scaleRatio);
                     const ctx = canvas.getContext('2d');
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0);
-                    const compressed = canvas.toDataURL('image/jpeg', 0.8);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const compressed = canvas.toDataURL('image/jpeg', 0.70);
                     resolve(compressed);
                 } catch (e) {
                     resolve(url);

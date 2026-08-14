@@ -583,68 +583,90 @@ function handleFileInput(e) {
   });
 }
 
-// Base64 Image Compression Helper (Reduces base64 size by 80-90%)
-function compressBase64(dataUrl, maxDimension = 1400, quality = 0.8) {
+// Base64 Image Compression Helper (Reduces base64 size with 100% safety fallback)
+function compressBase64(dataUrl, maxDimension = 1200, quality = 0.75) {
   return new Promise((resolve) => {
+    if (!dataUrl || !dataUrl.startsWith('data:image')) {
+      return resolve(dataUrl);
+    }
+    
+    // 3s Safety timeout: If canvas hangs or fails, return original untouched
+    const timeout = setTimeout(() => resolve(dataUrl), 3000);
+
     const img = new Image();
     img.onload = () => {
-      let width = img.naturalWidth || img.width;
-      let height = img.naturalHeight || img.height;
-      if (!width || !height) return resolve(dataUrl);
+      clearTimeout(timeout);
+      try {
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+        if (!width || !height) return resolve(dataUrl);
 
-      if (width > maxDimension || height > maxDimension) {
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
         }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        if (compressed && compressed.startsWith('data:image') && compressed.length < dataUrl.length) {
+          resolve(compressed);
+        } else {
+          resolve(dataUrl);
+        }
+      } catch (e) {
+        resolve(dataUrl);
       }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-
-      const compressed = canvas.toDataURL('image/jpeg', quality);
-      resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
     };
-    img.onerror = () => resolve(dataUrl);
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve(dataUrl);
+    };
     img.src = dataUrl;
   });
 }
 
-function optimizeMarkdownImages(mdText) {
-  return new Promise((resolve) => {
-    if (!mdText || !mdText.includes('data:image')) {
-      return resolve(mdText);
-    }
+async function optimizeMarkdownImages(mdText) {
+  if (!mdText || !mdText.includes('data:image')) {
+    return mdText;
+  }
 
-    const dataUriRegex = /(data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+)/g;
-    const matches = Array.from(mdText.matchAll(dataUriRegex));
-    if (!matches || matches.length === 0) return resolve(mdText);
+  try {
+    const dataUriRegex = /data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+/g;
+    const matches = mdText.match(dataUriRegex);
+    if (!matches || matches.length === 0) return mdText;
 
+    const uniqueUris = Array.from(new Set(matches));
     let updatedMd = mdText;
-    let completed = 0;
 
-    matches.forEach(async (match) => {
-      const originalUri = match[0];
-      if (originalUri.length > 250000) {
-        const compressedUri = await compressBase64(originalUri);
-        if (compressedUri && compressedUri.length < originalUri.length) {
-          updatedMd = updatedMd.replace(originalUri, compressedUri);
+    for (const originalUri of uniqueUris) {
+      if (originalUri.length > 300000) {
+        try {
+          const compressedUri = await compressBase64(originalUri);
+          if (compressedUri && compressedUri.startsWith('data:image') && compressedUri.length < originalUri.length) {
+            updatedMd = updatedMd.split(originalUri).join(compressedUri);
+          }
+        } catch (singleErr) {
+          console.warn('Single image compression skipped safely:', singleErr);
         }
       }
-      completed++;
-      if (completed === matches.length) {
-        resolve(updatedMd);
-      }
-    });
-  });
+    }
+    return updatedMd;
+  } catch (err) {
+    console.warn('Image optimization skipped due to safety guard:', err);
+    return mdText;
+  }
 }
 
 // Add or update article
@@ -1663,52 +1685,87 @@ async function handleClearAll() {
   }
 }
 
-// Export All Backup
-function handleExportBackup() {
+// Export All Backup (Supports GZIP CompressionStream)
+async function handleExportBackup() {
   if (articles.length === 0) {
     alert('No articles to export.');
     return;
   }
-  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(articles, null, 2));
+
+  const jsonStr = JSON.stringify(articles);
+
+  if (typeof CompressionStream !== 'undefined') {
+    try {
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const compressedStream = blob.stream().pipeThrough(new CompressionStream('gzip'));
+      const compressedBlob = await new Response(compressedStream).blob();
+
+      const url = URL.createObjectURL(compressedBlob);
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = url;
+      downloadAnchor.download = `medical_library_backup_${Date.now()}.json.gz`;
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      URL.revokeObjectURL(url);
+      return;
+    } catch (e) {
+      console.warn('Gzip compression export failed, falling back to JSON:', e);
+    }
+  }
+
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
   const downloadAnchor = document.createElement('a');
-  downloadAnchor.setAttribute('href', dataStr);
-  downloadAnchor.setAttribute('download', `coursology_markdown_articles_${Date.now()}.json`);
+  downloadAnchor.href = url;
+  downloadAnchor.download = `medical_library_backup_${Date.now()}.json`;
   document.body.appendChild(downloadAnchor);
   downloadAnchor.click();
   downloadAnchor.remove();
+  URL.revokeObjectURL(url);
 }
 
-// Import JSON Backup
-function handleJsonImport(e) {
+// Import Backup (Supports .json & .json.gz DecompressionStream)
+async function handleJsonImport(e) {
   const file = e.target.files[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    try {
-      const importedArticles = JSON.parse(event.target.result);
-      if (!Array.isArray(importedArticles)) {
-        alert('Invalid JSON format: Expected an array of articles.');
+  try {
+    let jsonText = '';
+
+    if (file.name.endsWith('.gz') || file.type.includes('gzip')) {
+      if (typeof DecompressionStream !== 'undefined') {
+        const decompressedStream = file.stream().pipeThrough(new DecompressionStream('gzip'));
+        jsonText = await new Response(decompressedStream).text();
+      } else {
+        alert('Your browser does not support decompressing .gz files.');
         return;
       }
-
-      let importedCount = 0;
-      for (const art of importedArticles) {
-        if (art && art.id && art.markdown) {
-          await addArticle(art);
-          importedCount++;
-        }
-      }
-
-      alert(`Successfully imported ${importedCount} article(s)!`);
-      if (articles.length > 0) {
-        displayArticle(articles[0].id);
-      }
-    } catch (err) {
-      alert('Error reading JSON backup file: ' + err.message);
+    } else {
+      jsonText = await file.text();
     }
-  };
-  reader.readAsText(file);
+
+    const importedArticles = JSON.parse(jsonText);
+    if (!Array.isArray(importedArticles)) {
+      alert('Invalid JSON format: Expected an array of articles.');
+      return;
+    }
+
+    let importedCount = 0;
+    for (const art of importedArticles) {
+      if (art && art.id && art.markdown) {
+        await addArticle(art);
+        importedCount++;
+      }
+    }
+
+    alert(`Successfully imported ${importedCount} article(s)!`);
+    if (articles.length > 0) {
+      displayArticle(articles[0].id);
+    }
+  } catch (err) {
+    alert('Error reading JSON backup file: ' + err.message);
+  }
 }
 
 // Initialize
