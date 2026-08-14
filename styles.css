@@ -40,19 +40,99 @@ body {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+  position: relative;
 }
 
 /* ==========================================
-   Sidebar Styling
+   Sidebar Resizing & Collapse Styling
    ========================================== */
 .sidebar {
   width: 320px;
-  min-width: 320px;
+  min-width: 180px;
+  max-width: 500px;
+  position: relative;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   height: 100%;
+  transition: width 0.2s ease, min-width 0.2s ease, padding 0.2s ease;
+}
+
+.sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-right: none !important;
+}
+
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.left-resizer {
+  right: -3px;
+}
+
+.right-resizer {
+  left: -3px;
+}
+
+.resizer:hover, .resizer.resizing {
+  background-color: var(--primary-500);
+}
+
+.sidebar-toggle-btn {
+  position: absolute;
+  top: 14px;
+  z-index: 100;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+  color: #334155;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  transition: transform 0.25s ease, background-color 0.2s;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: #f1f5f9;
+  color: var(--primary-600);
+}
+
+.left-toggle {
+  left: 304px;
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s ease;
+}
+
+.left-toggle.collapsed {
+  left: 8px;
+  transform: rotate(180deg);
+}
+
+.right-toggle {
+  right: 244px;
+  transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s ease;
+}
+
+.right-toggle.collapsed {
+  right: 8px;
+  transform: rotate(180deg);
 }
 
 .sidebar-header {
@@ -555,7 +635,9 @@ table.coursology-medical-table td {
    ========================================== */
 .media-sidebar {
   width: 260px;
-  min-width: 260px;
+  min-width: 160px;
+  max-width: 450px;
+  position: relative;
   background-color: #ffffff;
   border-left: 1px solid var(--border-color);
   padding: 24px 16px;
@@ -563,6 +645,16 @@ table.coursology-medical-table td {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  transition: width 0.2s ease, min-width 0.2s ease, padding 0.2s ease;
+}
+
+.media-sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-left: none !important;
 }
 
 .media-section-title {

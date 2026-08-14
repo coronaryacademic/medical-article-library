@@ -50,6 +50,44 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    // ─── Image Compression Helper (Reduces base64 size by 80-90%) ────────────
+    function compressImageDataUrl(dataUrl, maxDimension = 1400, quality = 0.8) {
+        return new Promise((resolve) => {
+            if (!dataUrl || !dataUrl.startsWith('data:image')) {
+                return resolve(dataUrl);
+            }
+            const img = new Image();
+            img.onload = () => {
+                let width = img.naturalWidth || img.width;
+                let height = img.naturalHeight || img.height;
+                if (!width || !height) return resolve(dataUrl);
+
+                if (width > maxDimension || height > maxDimension) {
+                    if (width > height) {
+                        height = Math.round((height * maxDimension) / width);
+                        width = maxDimension;
+                    } else {
+                        width = Math.round((width * maxDimension) / height);
+                        height = maxDimension;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const compressed = canvas.toDataURL('image/jpeg', quality);
+                resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
+            };
+            img.onerror = () => resolve(dataUrl);
+            img.src = dataUrl;
+        });
+    }
+
     // ─── Convert Canvas / Image element to Data URL ─────────────────────────
     function convertViaCanvas(url) {
         return new Promise((resolve) => {
@@ -61,8 +99,11 @@
                     canvas.width = img.naturalWidth || img.width || 600;
                     canvas.height = img.naturalHeight || img.height || 400;
                     const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
-                    resolve(canvas.toDataURL('image/png'));
+                    const compressed = canvas.toDataURL('image/jpeg', 0.8);
+                    resolve(compressed);
                 } catch (e) {
                     resolve(url);
                 }
@@ -86,7 +127,10 @@
                     onload: function(response) {
                         if (response.status >= 200 && response.status < 300 && response.response) {
                             const reader = new FileReader();
-                            reader.onload = () => resolve(reader.result);
+                            reader.onload = async () => {
+                                const compressed = await compressImageDataUrl(reader.result);
+                                resolve(compressed);
+                            };
                             reader.onerror = async () => resolve(await convertViaCanvas(url));
                             reader.readAsDataURL(response.response);
                         } else {
@@ -105,7 +149,10 @@
                 .then(res => res.blob())
                 .then(blob => {
                     const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
+                    reader.onload = async () => {
+                        const compressed = await compressImageDataUrl(reader.result);
+                        resolve(compressed);
+                    };
                     reader.onerror = async () => resolve(await convertViaCanvas(url));
                     reader.readAsDataURL(blob);
                 })
@@ -301,8 +348,25 @@
                 }
             }
 
+            let popupTitle = '';
+            const modalEl = document.querySelector('[data-is-open="true"]') || document.querySelector('[role="dialog"]');
+            if (modalEl) {
+                const heading = modalEl.querySelector('h1, h2, h3, h4, header, [class*="title"], figcaption');
+                if (heading && heading.innerText.trim()) {
+                    popupTitle = heading.innerText.trim();
+                }
+            }
+            if (!popupTitle && newImg && (newImg.alt || newImg.title)) {
+                popupTitle = (newImg.alt || newImg.title).trim();
+            }
+
+            let displayLabel = btnText;
+            if (popupTitle && /figure|table|fig|tbl/i.test(popupTitle)) {
+                displayLabel = popupTitle;
+            }
+
             if (newTable && typeof html2canvas !== 'undefined') {
-                console.log(`[Coursology Extractor] Found table for ${btnText}. Snapshotting with html2canvas...`);
+                console.log(`[Coursology Extractor] Found table for ${displayLabel}. Snapshotting with html2canvas...`);
                 try {
                     // Enforce generous width, padding and spacing on table before snapshot
                     newTable.style.minWidth = '650px';
@@ -321,24 +385,24 @@
                         logging: false,
                         useCORS: true
                     });
-                    const dataUrl = canvas.toDataURL('image/png');
-                    capturedPngMap.set(btn.id, { imgDataUrl: dataUrl, btnText });
-                    capturedPngMap.set(btnText.toLowerCase(), { imgDataUrl: dataUrl, btnText });
-                    console.log(`[Coursology Extractor] SUCCESS: Snapshotted table for ${btnText} (${dataUrl.slice(0, 50)}...)`);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    capturedPngMap.set(btn.id, { imgDataUrl: dataUrl, btnText, displayLabel });
+                    capturedPngMap.set(btnText.toLowerCase(), { imgDataUrl: dataUrl, btnText, displayLabel });
+                    console.log(`[Coursology Extractor] SUCCESS: Snapshotted table for ${displayLabel} (${dataUrl.slice(0, 50)}...)`);
                 } catch (e) {
-                    console.warn(`[Coursology Extractor] html2canvas failed for ${btnText}, saving raw HTML table:`, e);
-                    capturedPngMap.set(btn.id, { rawTable: newTable.cloneNode(true), btnText });
-                    capturedPngMap.set(btnText.toLowerCase(), { rawTable: newTable.cloneNode(true), btnText });
+                    console.warn(`[Coursology Extractor] html2canvas failed for ${displayLabel}, saving raw HTML table:`, e);
+                    capturedPngMap.set(btn.id, { rawTable: newTable.cloneNode(true), btnText, displayLabel });
+                    capturedPngMap.set(btnText.toLowerCase(), { rawTable: newTable.cloneNode(true), btnText, displayLabel });
                 }
             } else if (newImg) {
                 const absSrc = new URL(newImg.getAttribute('src') || newImg.src, window.location.href).href;
-                console.log(`[Coursology Extractor] Fetching & embedding image for ${btnText}: ${absSrc}`);
+                console.log(`[Coursology Extractor] Fetching & embedding image for ${displayLabel}: ${absSrc}`);
                 const base64Src = await imgUrlToBase64(absSrc);
-                capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText });
-                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText });
-                console.log(`[Coursology Extractor] Embedded figure image for ${btnText} (${base64Src.slice(0, 40)}...)`);
+                capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText, displayLabel });
+                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText, displayLabel });
+                console.log(`[Coursology Extractor] Embedded figure image for ${displayLabel} (${base64Src.slice(0, 40)}...)`);
             } else {
-                console.log(`[Coursology Extractor] No popup table or image found in DOM for ${btnText}. Checking container fallback...`);
+                console.log(`[Coursology Extractor] No popup table or image found in DOM for ${displayLabel}. Checking container fallback...`);
             }
 
             // Fallback: extract CDN URL directly from THIS button's container in the live DOM
@@ -347,13 +411,13 @@
                 const containerHtml = btnContainer ? btnContainer.outerHTML : '';
                 const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|webp|gif|svg)/i);
                 if (cdnMatch) {
-                    console.log(`[Coursology Extractor] Fetching & embedding CDN fallback for ${btnText}: ${cdnMatch[0]}`);
+                    console.log(`[Coursology Extractor] Fetching & embedding CDN fallback for ${displayLabel}: ${cdnMatch[0]}`);
                     const base64Src = await imgUrlToBase64(cdnMatch[0]);
-                    capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText });
-                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText });
-                    console.log(`[Coursology Extractor] Embedded CDN fallback for ${btnText} (${base64Src.slice(0, 40)}...)`);
+                    capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText, displayLabel });
+                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText, displayLabel });
+                    console.log(`[Coursology Extractor] Embedded CDN fallback for ${displayLabel} (${base64Src.slice(0, 40)}...)`);
                 } else {
-                    console.warn(`[Coursology Extractor] Nothing captured for: ${btnText}`);
+                    console.warn(`[Coursology Extractor] Nothing captured for: ${displayLabel}`);
                 }
             }
 
@@ -440,15 +504,17 @@
                 imgSrc = await imgUrlToBase64(rawFallbackUrl);
             }
 
+            const labelToShow = (captured && captured.displayLabel) ? captured.displayLabel : btnText;
+
             if (imgSrc) {
-                figureWrapper.innerHTML = `<span>(${btnText})</span><img src="${imgSrc}" alt="${btnText}" class="article-media-asset" style="display:none;" />`;
+                figureWrapper.innerHTML = `<span>(${labelToShow})</span><img src="${imgSrc}" alt="${labelToShow}" class="article-media-asset" style="display:none;" />`;
             } else if (captured && captured.rawTable) {
                 const cleanTbl = captured.rawTable.cloneNode(true);
                 cleanTbl.removeAttribute('class');
                 cleanTbl.style.display = 'none';
-                figureWrapper.innerHTML = `<span>(${btnText})</span>` + cleanTbl.outerHTML;
+                figureWrapper.innerHTML = `<span>(${labelToShow})</span>` + cleanTbl.outerHTML;
             } else {
-                figureWrapper.innerHTML = `<span>(${btnText})</span>`;
+                figureWrapper.innerHTML = `<span>(${labelToShow})</span>`;
             }
 
             targetToReplace.replaceWith(figureWrapper);

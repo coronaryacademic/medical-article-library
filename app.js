@@ -323,12 +323,15 @@ async function saveArticles(articleToSave) {
   renderSidebar();
 }
 
+const importJsonInput = document.getElementById('import-json-input');
+
 // Setup Event Listeners
 function setupEventListeners() {
   if (pasteBtn) pasteBtn.addEventListener('click', handleClipboardPaste);
   if (welcomePasteBtn) welcomePasteBtn.addEventListener('click', handleClipboardPaste);
 
   if (fileInput) fileInput.addEventListener('change', handleFileInput);
+  if (importJsonInput) importJsonInput.addEventListener('change', handleJsonImport);
   if (searchInput) searchInput.addEventListener('input', renderSidebar);
   if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
   if (exportAllBtn) exportAllBtn.addEventListener('click', handleExportBackup);
@@ -364,6 +367,8 @@ function setupEventListeners() {
     });
   }
 
+  setupSidebarResizingAndToggles();
+
   // Global Keyboard listener for Lightbox navigation
   document.addEventListener('keydown', (e) => {
     const scriptModal = document.getElementById('script-modal');
@@ -372,12 +377,13 @@ function setupEventListeners() {
       return;
     }
 
+    const tableLightboxModal = document.getElementById('table-lightbox');
     if (tableLightboxModal && !tableLightboxModal.classList.contains('hidden') && e.key === 'Escape') {
       closeTableLightbox();
       return;
     }
 
-    if (lightbox.classList.contains('hidden')) return;
+    if (lightbox && lightbox.classList.contains('hidden')) return;
 
     if (e.key === 'Escape') {
       closeLightbox();
@@ -387,6 +393,103 @@ function setupEventListeners() {
       showPrevFigure();
     }
   });
+}
+
+// Resizable & Collapsible Sidebars Setup
+function setupSidebarResizingAndToggles() {
+  const leftSidebar = document.getElementById('left-sidebar');
+  const leftResizer = document.getElementById('left-resizer');
+  const toggleLeftBtn = document.getElementById('toggle-left-sidebar-btn');
+
+  const mediaSidebar = document.getElementById('media-sidebar');
+  const rightResizer = document.getElementById('right-resizer');
+  const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+
+  // Left Sidebar Toggle
+  if (toggleLeftBtn && leftSidebar) {
+    toggleLeftBtn.addEventListener('click', () => {
+      const isCollapsing = !leftSidebar.classList.contains('collapsed');
+      leftSidebar.classList.toggle('collapsed');
+      toggleLeftBtn.classList.toggle('collapsed');
+      if (isCollapsing) {
+        toggleLeftBtn.style.left = '8px';
+      } else {
+        const curWidth = parseInt(leftSidebar.style.width) || 320;
+        toggleLeftBtn.style.left = `${curWidth - 14}px`;
+      }
+    });
+  }
+
+  // Right Sidebar Toggle
+  if (toggleRightBtn && mediaSidebar) {
+    toggleRightBtn.addEventListener('click', () => {
+      const isCollapsing = !mediaSidebar.classList.contains('collapsed');
+      mediaSidebar.classList.toggle('collapsed');
+      toggleRightBtn.classList.toggle('collapsed');
+      if (isCollapsing) {
+        toggleRightBtn.style.right = '8px';
+      } else {
+        const curWidth = parseInt(mediaSidebar.style.width) || 260;
+        toggleRightBtn.style.right = `${curWidth - 14}px`;
+      }
+    });
+  }
+
+  // Left Resizer Dragging
+  if (leftResizer && leftSidebar && toggleLeftBtn) {
+    let isDragging = false;
+    leftResizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isDragging = true;
+      leftResizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      let newWidth = e.clientX;
+      if (newWidth < 180) newWidth = 180;
+      if (newWidth > 500) newWidth = 500;
+      leftSidebar.style.width = `${newWidth}px`;
+      toggleLeftBtn.style.left = `${newWidth - 16}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        leftResizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+      }
+    });
+  }
+
+  // Right Resizer Dragging
+  if (rightResizer && mediaSidebar && toggleRightBtn) {
+    let isDraggingRight = false;
+    rightResizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isDraggingRight = true;
+      rightResizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDraggingRight) return;
+      let newWidth = window.innerWidth - e.clientX;
+      if (newWidth < 160) newWidth = 160;
+      if (newWidth > 450) newWidth = 450;
+      mediaSidebar.style.width = `${newWidth}px`;
+      toggleRightBtn.style.right = `${newWidth - 16}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDraggingRight) {
+        isDraggingRight = false;
+        rightResizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+      }
+    });
+  }
 }
 
 // Script Modal Helpers
@@ -480,8 +583,75 @@ function handleFileInput(e) {
   });
 }
 
+// Base64 Image Compression Helper (Reduces base64 size by 80-90%)
+function compressBase64(dataUrl, maxDimension = 1400, quality = 0.8) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.naturalWidth || img.width;
+      let height = img.naturalHeight || img.height;
+      if (!width || !height) return resolve(dataUrl);
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function optimizeMarkdownImages(mdText) {
+  return new Promise((resolve) => {
+    if (!mdText || !mdText.includes('data:image')) {
+      return resolve(mdText);
+    }
+
+    const dataUriRegex = /(data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+)/g;
+    const matches = Array.from(mdText.matchAll(dataUriRegex));
+    if (!matches || matches.length === 0) return resolve(mdText);
+
+    let updatedMd = mdText;
+    let completed = 0;
+
+    matches.forEach(async (match) => {
+      const originalUri = match[0];
+      if (originalUri.length > 250000) {
+        const compressedUri = await compressBase64(originalUri);
+        if (compressedUri && compressedUri.length < originalUri.length) {
+          updatedMd = updatedMd.replace(originalUri, compressedUri);
+        }
+      }
+      completed++;
+      if (completed === matches.length) {
+        resolve(updatedMd);
+      }
+    });
+  });
+}
+
 // Add or update article
 async function addArticle(articleData, autoSave = true) {
+  if (articleData && articleData.markdown) {
+    articleData.markdown = await optimizeMarkdownImages(articleData.markdown);
+  }
   const existingIdx = articles.findIndex(a => a.title === articleData.title);
   if (existingIdx >= 0) {
     articles[existingIdx] = articleData;
@@ -511,6 +681,8 @@ function renderSidebar() {
       welcomeState.classList.remove('hidden');
       articleContent.classList.add('hidden');
       if (mediaSidebar) mediaSidebar.classList.add('hidden');
+      const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+      if (toggleRightBtn) toggleRightBtn.classList.add('hidden');
     }
     return;
   }
@@ -954,15 +1126,21 @@ function renderMediaSidebar(container) {
 
   // Render Figures Section
   figuresList.forEach((fig, i) => {
-    const figNum = i + 1;
+    const defaultNum = i + 1;
+    let labelText = (fig.alt || fig.title || '').trim();
+    if (!labelText) {
+      labelText = `figure ${defaultNum}`;
+    }
+    labelText = labelText.replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'media-thumb-btn';
     btn.innerHTML = `
       <div class="media-thumb-box">
-        <img src="${fig.src}" alt="figure ${figNum}" loading="lazy" class="media-thumb-img">
+        <img src="${fig.src}" alt="${labelText}" loading="lazy" class="media-thumb-img">
       </div>
-      <p class="media-thumb-label">figure ${figNum}</p>
+      <p class="media-thumb-label">${labelText}</p>
     `;
     btn.onclick = () => {
       openLightbox(fig.index);
@@ -1004,6 +1182,8 @@ function renderMediaSidebar(container) {
   });
 
   mediaSidebar.classList.remove('hidden');
+  const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+  if (toggleRightBtn) toggleRightBtn.classList.remove('hidden');
 }
 
 // Setup Lightbox Gallery Items - scans ALL images including hidden exhibit assets
@@ -1044,15 +1224,22 @@ function processFigureAndTableLinks(container) {
     figureMap[`figure ${figNum}`] = item;
     figureMap[`fig ${figNum}`] = item;
     figureMap[`fig. ${figNum}`] = item;
+    figureMap[`image ${figNum}`] = item;
+    figureMap[`img ${figNum}`] = item;
+    figureMap[`img. ${figNum}`] = item;
+    figureMap[`exhibit ${figNum}`] = item;
     figureMap[String(figNum)] = item;
 
     if (item.alt) {
-      const match = item.alt.match(/(?:Figure|Fig\.?|Table|Tbl\.?)\s*(\d+[A-Za-z]?)/i);
+      const match = item.alt.match(/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*(\d+[A-Za-z]?)/i);
       if (match) {
         const keyNum = match[1].toLowerCase();
         const isTab = match[0].toLowerCase().startsWith('tab');
         const prefixStr = isTab ? 'table ' : 'figure ';
         figureMap[`${prefixStr}${keyNum}`] = item;
+        figureMap[`image ${keyNum}`] = item;
+        figureMap[`img ${keyNum}`] = item;
+        figureMap[`img. ${keyNum}`] = item;
         if (isTab) {
           figureMap[`tbl ${keyNum}`] = item;
           figureMap[`tbl. ${keyNum}`] = item;
@@ -1079,6 +1266,7 @@ function processFigureAndTableLinks(container) {
 
     figureMap[`table ${tblNum}`] = tableData;
     figureMap[`tbl ${tblNum}`] = tableData;
+    figureMap[`tbl. ${tblNum}`] = tableData;
   });
 
   // 3. TreeWalker to process text nodes cleanly without breaking HTML structure
@@ -1097,7 +1285,7 @@ function processFigureAndTableLinks(container) {
         if (parent.classList && (parent.classList.contains('figure-link') || parent.classList.contains('exhibit-btn'))) {
           return NodeFilter.FILTER_REJECT;
         }
-        if (/(?:Figure|Fig\.?|Table)\s*\d+/i.test(node.nodeValue)) {
+        if (/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*\d+/i.test(node.nodeValue)) {
           return NodeFilter.FILTER_ACCEPT;
         }
         return NodeFilter.FILTER_SKIP;
@@ -1110,7 +1298,7 @@ function processFigureAndTableLinks(container) {
     textNodes.push(walker.currentNode);
   }
 
-  const figRegex = /\b(Figure|Fig\.?|Table)\s*(\d+[A-Za-z]?)\b/gi;
+  const figRegex = /(?:\(\(|\(|\[)?\s*\b(Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*(\d+[A-Za-z]?)\b\s*(?:\)\)|\)|\])?/gi;
 
   const cameraIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 512 512" fill="currentColor"><path d="M149.1 64c-11.4 0-21.8 6.4-27.1 16.5L100.8 128H48C21.5 128 0 149.5 0 176V432c0 26.5 21.5 48 48 48H464c26.5 0 48-21.5 48-48V176c0-26.5-21.5-48-48-48H411.2l-21.2-47.5c-5.3-10.1-15.7-16.5-27.1-16.5H149.1zM256 208a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/></svg>`;
   const tableIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 512 512" fill="currentColor"><path d="M64 256l0-96 160 0 0 96L64 256zm0 64l160 0 0 96L64 416l0-96zm224 96l0-96 160 0 0 96-160 0zM448 256l-160 0 0-96 160 0 0 96zM64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32z"/></svg>`;
@@ -1133,18 +1321,21 @@ function processFigureAndTableLinks(container) {
       const prefix = match[1];
       const num = match[2];
       const isTable = prefix.toLowerCase().startsWith('tab');
-      const lookupKey = (isTable ? 'table ' : 'figure ') + num.toLowerCase();
-      
-      let target = isTable 
-        ? (figureMap[lookupKey] || figureMap[`tbl ${num.toLowerCase()}`] || figureMap[`tbl. ${num.toLowerCase()}`])
-        : (figureMap[lookupKey] || figureMap[`fig ${num.toLowerCase()}`] || figureMap[`fig. ${num.toLowerCase()}`]);
+      const cleanLabel = `${prefix} ${num}`;
+
+      const keyLower = `${prefix.toLowerCase()} ${num.toLowerCase()}`;
+      let target = figureMap[keyLower]
+        || figureMap[`image ${num.toLowerCase()}`]
+        || figureMap[`figure ${num.toLowerCase()}`]
+        || figureMap[`fig ${num.toLowerCase()}`]
+        || figureMap[num.toLowerCase()];
 
       // Create High-Fidelity Exhibit Button
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = isTable ? 'exhibit-btn table-link' : 'exhibit-btn';
-      btn.innerHTML = `${isTable ? tableIconSvg : cameraIconSvg}<span>${fullMatch}</span>`;
-      btn.title = `Click to view ${fullMatch} popup`;
+      btn.innerHTML = `${isTable ? tableIconSvg : cameraIconSvg}<span>${cleanLabel}</span>`;
+      btn.title = `Click to view ${cleanLabel} popup`;
 
       btn.onclick = (e) => {
         e.preventDefault();
@@ -1170,16 +1361,15 @@ function processFigureAndTableLinks(container) {
         }
 
         if (foundTarget && foundTarget.isTable) {
-          openTableLightbox(foundTarget.element, foundTarget.caption || fullMatch);
+          openTableLightbox(foundTarget.element, foundTarget.caption || cleanLabel);
         } else if (foundTarget && typeof foundTarget.index === 'number') {
           openLightbox(foundTarget.index);
         } else if (currentFigureList.length > 0) {
-          // Fallback to first available figure image
-          const fallbackIdx = Math.max(0, parseInt(num, 10) - 1);
-          const safeIdx = Math.min(fallbackIdx, currentFigureList.length - 1);
+          const fallbackNum = parseInt(num, 10);
+          const safeIdx = !isNaN(fallbackNum) && fallbackNum > 0 ? Math.min(fallbackNum - 1, currentFigureList.length - 1) : 0;
           openLightbox(safeIdx);
         } else {
-          alert(`Media for ${fullMatch} popup is loading or was not found.`);
+          alert(`Media for ${cleanLabel} popup is loading or was not found.`);
         }
       };
 
@@ -1453,6 +1643,8 @@ function deleteArticle(id) {
     welcomeState.classList.remove('hidden');
     articleContent.classList.add('hidden');
     if (mediaSidebar) mediaSidebar.classList.add('hidden');
+    const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+    if (toggleRightBtn) toggleRightBtn.classList.add('hidden');
   }
 }
 
@@ -1466,6 +1658,8 @@ async function handleClearAll() {
     welcomeState.classList.remove('hidden');
     articleContent.classList.add('hidden');
     if (mediaSidebar) mediaSidebar.classList.add('hidden');
+    const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+    if (toggleRightBtn) toggleRightBtn.classList.add('hidden');
   }
 }
 
@@ -1482,6 +1676,39 @@ function handleExportBackup() {
   document.body.appendChild(downloadAnchor);
   downloadAnchor.click();
   downloadAnchor.remove();
+}
+
+// Import JSON Backup
+function handleJsonImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const importedArticles = JSON.parse(event.target.result);
+      if (!Array.isArray(importedArticles)) {
+        alert('Invalid JSON format: Expected an array of articles.');
+        return;
+      }
+
+      let importedCount = 0;
+      for (const art of importedArticles) {
+        if (art && art.id && art.markdown) {
+          await addArticle(art);
+          importedCount++;
+        }
+      }
+
+      alert(`Successfully imported ${importedCount} article(s)!`);
+      if (articles.length > 0) {
+        displayArticle(articles[0].id);
+      }
+    } catch (err) {
+      alert('Error reading JSON backup file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 // Initialize

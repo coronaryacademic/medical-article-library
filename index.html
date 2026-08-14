@@ -10,8 +10,13 @@
 </head>
 <body>
   <div class="app-layout">
+    <!-- Left Sidebar Collapse Handle/Button -->
+    <button id="toggle-left-sidebar-btn" class="sidebar-toggle-btn left-toggle" title="Toggle Sidebar">
+      ‹
+    </button>
+
     <!-- Left Sidebar -->
-    <aside class="sidebar">
+    <aside id="left-sidebar" class="sidebar">
       <div class="sidebar-header">
         <h2>Medical Library</h2>
         <span id="article-count" class="count-badge">0 articles</span>
@@ -39,8 +44,13 @@
 
       <div class="sidebar-footer">
         <button id="clear-all-btn" class="btn text-btn">Clear All</button>
-        <button id="export-all-btn" class="btn text-btn">Export Backup</button>
+        <button id="export-all-btn" class="btn text-btn">Export JSON</button>
+        <label class="btn text-btn file-label" style="cursor: pointer;">
+          Import JSON
+          <input type="file" id="import-json-input" accept=".json" hidden>
+        </label>
       </div>
+      <div id="left-resizer" class="resizer left-resizer"></div>
     </aside>
 
     <!-- Main Content Viewer -->
@@ -80,6 +90,7 @@
 
     <!-- Right Media Sidebar (Coursology Style) -->
     <aside aria-label="Article media" id="media-sidebar" class="media-sidebar hidden">
+      <div id="right-resizer" class="resizer right-resizer"></div>
       <section class="media-section">
         <h3 class="media-section-title">FIGURES</h3>
         <div id="media-figures-grid" class="media-grid"></div>
@@ -89,6 +100,11 @@
         <div id="media-tables-grid" class="media-grid"></div>
       </section>
     </aside>
+
+    <!-- Right Sidebar Collapse Toggle Button -->
+    <button id="toggle-right-sidebar-btn" class="sidebar-toggle-btn right-toggle hidden" title="Toggle Media Sidebar">
+      ›
+    </button>
   </div>
 
   <!-- Image Lightbox Window Modal for Figures -->
