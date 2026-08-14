@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Article Library</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Marked.js Markdown Parser -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Medical Library</h2>
+        <span id="article-count" class="count-badge">0 articles</span>
+      </div>
+
+      <div class="actions">
+        <button id="paste-btn" class="btn primary-btn">+ Paste Markdown</button>
+        <label class="btn secondary-btn file-label">
+          Import .md
+          <input type="file" id="file-input" accept=".md,.txt" multiple hidden>
+        </label>
+      </div>
+
+      <div class="script-action" style="margin-bottom: 12px;">
+        <button id="script-modal-btn" class="btn script-btn">Get Tampermonkey Script</button>
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search articles...">
+      </div>
+
+      <div class="article-list-container">
+        <ul id="article-flat-list" class="article-flat-list"></ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="clear-all-btn" class="btn text-btn">Clear All</button>
+        <button id="export-all-btn" class="btn text-btn">Export Backup</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Viewer -->
+    <main class="main-viewer">
+      <div id="welcome-state" class="empty-state">
+        <div class="empty-card">
+          <h1>Medical Markdown Reader</h1>
+          <p>Click "Copy Article MD" on Coursology, then paste here!</p>
+          <div class="shortcut-box">
+            <button id="welcome-paste-btn" class="btn primary-btn large">Paste Markdown from Clipboard</button>
+          </div>
+        </div>
+      </div>
+
+      <article id="article-content" class="article-content hidden">
+        <header class="article-header">
+          <h1 id="article-title">Article Title</h1>
+          <div class="article-meta-row">
+            <span id="article-date">Extracted: --</span>
+            
+            <div class="article-toolbar">
+              <button id="article-collapse-all-btn" class="btn toolbar-btn" title="Collapse all article sections">
+                <svg class="svg-icon-sm" viewBox="0 0 448 512" fill="currentColor"><path d="M432 256c0 17.7-14.3 32-32 32L48 288c-17.7 0-32-14.3-32-32s14.3-32 32-32l352 0c17.7 0 32 14.3 32 32z"/></svg>
+                <span>Collapse All</span>
+              </button>
+              <button id="article-expand-all-btn" class="btn toolbar-btn" title="Expand all article sections">
+                <svg class="svg-icon-sm" viewBox="0 0 448 512" fill="currentColor"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32V224H48c-17.7 0-32 14.3-32 32s14.3 32 32 32H192V432c0 17.7 14.3 32 32 32s32-14.3 32-32V288H400c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z"/></svg>
+                <span>Expand All</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div id="article-body" class="article-body"></div>
+      </article>
+    </main>
+
+    <!-- Right Media Sidebar (Coursology Style) -->
+    <aside aria-label="Article media" id="media-sidebar" class="media-sidebar hidden">
+      <section class="media-section">
+        <h3 class="media-section-title">FIGURES</h3>
+        <div id="media-figures-grid" class="media-grid"></div>
+      </section>
+      <section class="media-section">
+        <h3 class="media-section-title">TABLES</h3>
+        <div id="media-tables-grid" class="media-grid"></div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Image Lightbox Modal for Figures -->
+  <div id="lightbox" class="lightbox hidden">
+    <span id="lightbox-close" class="lightbox-close">&times;</span>
+    <button id="lightbox-prev" class="lightbox-nav lightbox-prev" title="Previous Figure">&lsaquo;</button>
+    <img id="lightbox-img" src="" alt="Enlarged Diagram">
+    <button id="lightbox-next" class="lightbox-nav lightbox-next" title="Next Figure">&rsaquo;</button>
+    <div class="lightbox-footer">
+      <div id="lightbox-counter" class="lightbox-counter">Figure 1 of 1</div>
+      <div id="lightbox-caption" class="lightbox-caption"></div>
+    </div>
+  </div>
+
+  <!-- Table Lightbox Modal for Tables -->
+  <div id="table-lightbox" class="lightbox hidden" style="background: rgba(0, 0, 0, 0.85);">
+    <div class="modal-card" style="background: #ffffff; color: #111111; padding: 24px; border-radius: 8px; max-width: 900px; width: 95%; max-height: 88vh; overflow-y: auto; border: 3px solid #000000; position: relative;">
+      <span id="table-lightbox-close" style="position: absolute; top: 12px; right: 16px; font-size: 2rem; cursor: pointer; font-weight: bold; font-family: sans-serif; color: #111111;">&times;</span>
+      <h3 id="table-lightbox-title" style="font-family: Arial, sans-serif; margin-bottom: 16px; font-size: 1.3rem; border-bottom: 2px solid #2563eb; padding-bottom: 8px; color: #2563eb;">Table</h3>
+      <div id="table-lightbox-content" style="overflow-x: auto; font-family: Arial, sans-serif; font-size: 0.95rem;"></div>
+    </div>
+  </div>
+
+  <!-- Tampermonkey Script Modal -->
+  <div id="script-modal" class="lightbox hidden" style="background: rgba(0,0,0,0.85);">
+    <div class="modal-card" style="background: #ffffff; color: #111111; padding: 24px; border-radius: 8px; max-width: 680px; width: 92%; max-height: 85vh; overflow-y: auto; border: 2px solid #000000; position: relative;">
+      <span id="script-modal-close" style="position: absolute; top: 12px; right: 16px; font-size: 2rem; cursor: pointer; font-weight: bold; font-family: sans-serif;">&times;</span>
+      <h2 style="font-family: Arial, sans-serif; margin-bottom: 12px; font-size: 1.3rem;">Coursology Extractor Tampermonkey Script</h2>
+      <p style="font-family: Arial, sans-serif; font-size: 0.95rem; margin-bottom: 16px; color: #333333; line-height: 1.4;">
+        This script runs on Coursology article pages and adds the <strong>"Copy Article MD"</strong> button at the bottom-right corner of your screen.
+      </p>
+      
+      <div style="background: #f3f4f6; border-left: 4px solid #2563eb; padding: 12px 16px; font-family: Arial, sans-serif; font-size: 0.88rem; margin-bottom: 16px; border-radius: 0 4px 4px 0;">
+        <strong>Quick Setup Instructions:</strong>
+        <ol style="margin-left: 20px; margin-top: 6px; line-height: 1.5;">
+          <li>Install the <strong>Tampermonkey</strong> extension in Chrome/Firefox/Brave/Edge.</li>
+          <li>Open Tampermonkey and click <strong>Create a new script</strong>.</li>
+          <li>Click the button below to copy the code, replace everything in Tampermonkey with it, and press <code>Ctrl+S</code> to save.</li>
+          <li>Open any article on Coursology — the blue <strong>"Copy Article MD"</strong> button will appear at the bottom-right!</li>
+        </ol>
+      </div>
+
+      <button id="copy-script-code-btn" class="btn primary-btn" style="width: 100%; padding: 12px; font-size: 1rem; margin-bottom: 14px; background: #2563eb; border-color: #1d4ed8; color: #ffffff;">Copy Tampermonkey Script Code</button>
+      <textarea id="script-code-textarea" style="width: 100%; height: 220px; font-family: monospace; font-size: 0.75rem; padding: 10px; border: 2px solid #000000; border-radius: 4px; resize: vertical;" readonly></textarea>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
