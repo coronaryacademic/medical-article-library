@@ -91,26 +91,76 @@
     </aside>
   </div>
 
-  <!-- Image Lightbox Modal for Figures -->
+  <!-- Image Lightbox Window Modal for Figures -->
   <div id="lightbox" class="lightbox hidden">
-    <span id="lightbox-close" class="lightbox-close">&times;</span>
-    <button id="lightbox-prev" class="lightbox-nav lightbox-prev" title="Previous Figure">&lsaquo;</button>
-    <img id="lightbox-img" src="" alt="Enlarged Diagram">
-    <button id="lightbox-next" class="lightbox-nav lightbox-next" title="Next Figure">&rsaquo;</button>
-    <div class="lightbox-footer">
-      <div id="lightbox-counter" class="lightbox-counter">Figure 1 of 1</div>
-      <div id="lightbox-caption" class="lightbox-caption"></div>
+    <div id="lightbox-window" class="window-card">
+      <div id="lightbox-header" class="window-header">
+        <div class="window-title-group">
+          <svg class="window-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span id="window-title" class="window-title-text">Exhibit Viewer</span>
+        </div>
+        <div class="window-controls">
+          <button id="lightbox-min-btn" class="win-btn win-min" title="Minimize">—</button>
+          <button id="lightbox-max-btn" class="win-btn win-max" title="Maximize / Restore">❐</button>
+          <button id="lightbox-close-btn" class="win-btn win-close" title="Close">&times;</button>
+        </div>
+      </div>
+
+      <div class="window-toolbar">
+        <div class="toolbar-group">
+          <button id="tool-zoom-in" class="tool-btn" title="Zoom In (+)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button id="tool-zoom-out" class="tool-btn" title="Zoom Out (-)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button id="tool-zoom-reset" class="tool-btn text-tool-btn" title="Reset Zoom & Position">100% Fit</button>
+          <button id="tool-rotate" class="tool-btn" title="Rotate Right 90°">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6"/><path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          </button>
+        </div>
+
+        <div class="toolbar-group">
+          <button id="lightbox-prev" class="tool-btn" title="Previous Figure (←)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span id="lightbox-counter" class="lightbox-counter-text">Figure 1 of 1</span>
+          <button id="lightbox-next" class="tool-btn" title="Next Figure (→)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="lightbox-viewport" class="window-body image-viewport">
+        <img id="lightbox-img" src="" alt="Enlarged Diagram" draggable="false">
+      </div>
+
+      <div class="window-footer">
+        <div id="lightbox-caption" class="lightbox-caption"></div>
+      </div>
     </div>
   </div>
 
-  <!-- Table Lightbox Modal for Tables -->
-  <div id="table-lightbox" class="lightbox hidden" style="background: rgba(0, 0, 0, 0.85);">
-    <div class="modal-card" style="background: #ffffff; color: #111111; padding: 24px; border-radius: 8px; max-width: 900px; width: 95%; max-height: 88vh; overflow-y: auto; border: 3px solid #000000; position: relative;">
-      <span id="table-lightbox-close" style="position: absolute; top: 12px; right: 16px; font-size: 2rem; cursor: pointer; font-weight: bold; font-family: sans-serif; color: #111111;">&times;</span>
-      <h3 id="table-lightbox-title" style="font-family: Arial, sans-serif; margin-bottom: 16px; font-size: 1.3rem; border-bottom: 2px solid #2563eb; padding-bottom: 8px; color: #2563eb;">Table</h3>
-      <div id="table-lightbox-content" style="overflow-x: auto; font-family: Arial, sans-serif; font-size: 0.95rem;"></div>
+  <!-- Table Lightbox Window Modal for Tables -->
+  <div id="table-lightbox" class="lightbox hidden">
+    <div id="table-window" class="window-card table-window-card">
+      <div id="table-window-header" class="window-header">
+        <div class="window-title-group">
+          <svg class="window-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+          <span id="table-lightbox-title" class="window-title-text">Table Viewer</span>
+        </div>
+        <div class="window-controls">
+          <button id="table-min-btn" class="win-btn win-min" title="Minimize">—</button>
+          <button id="table-max-btn" class="win-btn win-max" title="Maximize / Restore">❐</button>
+          <button id="table-lightbox-close" class="win-btn win-close" title="Close">&times;</button>
+        </div>
+      </div>
+      <div id="table-lightbox-content" class="window-body table-viewport"></div>
     </div>
   </div>
+
+  <!-- Floating Minimized Windows Dock -->
+  <div id="minimized-dock" class="minimized-dock hidden"></div>
 
   <!-- Tampermonkey Script Modal -->
   <div id="script-modal" class="lightbox hidden" style="background: rgba(0,0,0,0.85);">

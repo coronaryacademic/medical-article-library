@@ -14,11 +14,33 @@ const STORAGE_KEY = 'coursology_markdown_articles_db';
 let articles = [];
 let activeArticleId = null;
 
-// Lightbox / Gallery State
+// Lightbox / Gallery State & Zoom Tools
 let currentFigureList = []; // Array of { src, caption, element, alt, index }
 let currentFigureIndex = 0;
 let currentArticleToc = []; // [{ id, text, level }]
 let activeTocCollapsed = false; // Tracks if active article TOC is collapsed in sidebar
+
+// Pan & Zoom State
+let imgZoom = 1.0;
+let imgRotation = 0;
+let imgPanX = 0;
+let imgPanY = 0;
+let isPanning = false;
+let startPanX = 0;
+let startPanY = 0;
+
+function updateImageTransform() {
+  if (!lightboxImg) return;
+  lightboxImg.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom}) rotate(${imgRotation}deg)`;
+}
+
+function resetImageTransform() {
+  imgZoom = 1.0;
+  imgRotation = 0;
+  imgPanX = 0;
+  imgPanY = 0;
+  updateImageTransform();
+}
 
 // DOM Elements
 const pasteBtn = document.getElementById('paste-btn');
@@ -48,7 +70,6 @@ const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
 const lightboxCaption = document.getElementById('lightbox-caption');
 const lightboxCounter = document.getElementById('lightbox-counter');
-const lightboxClose = document.getElementById('lightbox-close');
 const lightboxPrev = document.getElementById('lightbox-prev');
 const lightboxNext = document.getElementById('lightbox-next');
 
@@ -59,6 +80,8 @@ function init() {
   }
   loadArticles();
   setupEventListeners();
+  setupPanAndZoom();
+  setupWindowControls();
   setupScrollSpy();
   renderSidebar();
 
@@ -222,13 +245,13 @@ function saveArticles() {
 
 // Setup Event Listeners
 function setupEventListeners() {
-  pasteBtn.addEventListener('click', handleClipboardPaste);
-  welcomePasteBtn.addEventListener('click', handleClipboardPaste);
+  if (pasteBtn) pasteBtn.addEventListener('click', handleClipboardPaste);
+  if (welcomePasteBtn) welcomePasteBtn.addEventListener('click', handleClipboardPaste);
 
-  fileInput.addEventListener('change', handleFileInput);
-  searchInput.addEventListener('input', renderSidebar);
-  clearAllBtn.addEventListener('click', handleClearAll);
-  exportAllBtn.addEventListener('click', handleExportBackup);
+  if (fileInput) fileInput.addEventListener('change', handleFileInput);
+  if (searchInput) searchInput.addEventListener('input', renderSidebar);
+  if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
+  if (exportAllBtn) exportAllBtn.addEventListener('click', handleExportBackup);
 
   if (articleCollapseAllBtn) articleCollapseAllBtn.addEventListener('click', collapseAllArticleSections);
   if (articleExpandAllBtn) articleExpandAllBtn.addEventListener('click', expandAllArticleSections);
@@ -241,13 +264,16 @@ function setupEventListeners() {
   if (scriptModalClose) scriptModalClose.addEventListener('click', closeScriptModal);
   if (copyScriptCodeBtn) copyScriptCodeBtn.addEventListener('click', copyScriptCode);
 
-  lightboxClose.addEventListener('click', closeLightbox);
+  const lightboxCloseBtn = document.getElementById('lightbox-close-btn');
+  if (lightboxCloseBtn) lightboxCloseBtn.addEventListener('click', closeLightbox);
   if (lightboxPrev) lightboxPrev.addEventListener('click', showPrevFigure);
   if (lightboxNext) lightboxNext.addEventListener('click', showNextFigure);
 
-  lightbox.addEventListener('click', (e) => {
-    if (e.target === lightbox) closeLightbox();
-  });
+  if (lightbox) {
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+  }
 
   const tableLightboxClose = document.getElementById('table-lightbox-close');
   const tableLightboxModal = document.getElementById('table-lightbox');
@@ -1090,17 +1116,185 @@ function processFigureAndTableLinks(container) {
   });
 }
 
-// Table Lightbox Modal Functions
+// Setup Mouse Drag Pan & Scroll Zoom
+function setupPanAndZoom() {
+  const viewport = document.getElementById('lightbox-viewport');
+  const zoomInBtn = document.getElementById('tool-zoom-in');
+  const zoomOutBtn = document.getElementById('tool-zoom-out');
+  const zoomResetBtn = document.getElementById('tool-zoom-reset');
+  const rotateBtn = document.getElementById('tool-rotate');
+
+  if (zoomInBtn) zoomInBtn.addEventListener('click', () => { imgZoom += 0.25; updateImageTransform(); });
+  if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => { imgZoom = Math.max(0.3, imgZoom - 0.25); updateImageTransform(); });
+  if (zoomResetBtn) zoomResetBtn.addEventListener('click', resetImageTransform);
+  if (rotateBtn) rotateBtn.addEventListener('click', () => { imgRotation = (imgRotation + 90) % 360; updateImageTransform(); });
+
+  if (viewport) {
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        imgZoom += 0.15;
+      } else {
+        imgZoom = Math.max(0.3, imgZoom - 0.15);
+      }
+      updateImageTransform();
+    }, { passive: false });
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      isPanning = true;
+      startPanX = e.clientX - imgPanX;
+      startPanY = e.clientY - imgPanY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      imgPanX = e.clientX - startPanX;
+      imgPanY = e.clientY - startPanY;
+      updateImageTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isPanning = false;
+    });
+  }
+}
+
+// Setup Draggable & Resizable Window Controls
+function setupWindowControls() {
+  const imgWindow = document.getElementById('lightbox-window');
+  const imgHeader = document.getElementById('lightbox-header');
+  const imgModal = document.getElementById('lightbox');
+  const imgMin = document.getElementById('lightbox-min-btn');
+  const imgMax = document.getElementById('lightbox-max-btn');
+  const imgClose = document.getElementById('lightbox-close-btn');
+
+  const tblWindow = document.getElementById('table-window');
+  const tblHeader = document.getElementById('table-window-header');
+  const tblModal = document.getElementById('table-lightbox');
+  const tblMin = document.getElementById('table-min-btn');
+  const tblMax = document.getElementById('table-max-btn');
+  const tblClose = document.getElementById('table-lightbox-close');
+
+  if (imgWindow && imgHeader) {
+    makeWindowDraggableAndResizable(imgWindow, imgHeader, imgModal, imgMin, imgMax, imgClose, 'Exhibit Viewer');
+  }
+
+  if (tblWindow && tblHeader) {
+    makeWindowDraggableAndResizable(tblWindow, tblHeader, tblModal, tblMin, tblMax, tblClose, 'Table Viewer');
+  }
+}
+
+function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtnEl, maxBtnEl, closeBtnEl, defaultTitle) {
+  let isDragging = false;
+  let startX = 0, startY = 0;
+  let initialLeft = 0, initialTop = 0;
+
+  cardEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  headerEl.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.win-btn')) return;
+    if (cardEl.classList.contains('maximized')) return;
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    
+    const rect = cardEl.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialTop = rect.top;
+
+    cardEl.style.left = `${initialLeft}px`;
+    cardEl.style.top = `${initialTop}px`;
+    cardEl.style.margin = '0';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    
+    const newLeft = Math.max(0, Math.min(window.innerWidth - cardEl.offsetWidth, initialLeft + dx));
+    const newTop = Math.max(0, Math.min(window.innerHeight - cardEl.offsetHeight, initialTop + dy));
+
+    cardEl.style.left = `${newLeft}px`;
+    cardEl.style.top = `${newTop}px`;
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  if (maxBtnEl) {
+    maxBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cardEl.classList.toggle('maximized');
+      if (!cardEl.classList.contains('maximized')) {
+        cardEl.style.left = '';
+        cardEl.style.top = '';
+        cardEl.style.margin = '';
+      }
+    });
+  }
+
+  if (minBtnEl) {
+    minBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modalParentEl.classList.add('hidden');
+      const windowTitleText = cardEl.querySelector('.window-title-text')?.innerText || defaultTitle;
+      addDockBadge(windowTitleText, () => {
+        modalParentEl.classList.remove('hidden');
+      });
+    });
+  }
+
+  if (closeBtnEl) {
+    closeBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modalParentEl.classList.add('hidden');
+    });
+  }
+}
+
+function addDockBadge(label, onRestore) {
+  const dock = document.getElementById('minimized-dock');
+  if (!dock) return;
+  dock.classList.remove('hidden');
+
+  const badge = document.createElement('div');
+  badge.className = 'dock-badge';
+  badge.innerHTML = `<span>${label}</span> <span style="opacity:0.6;">✕</span>`;
+  badge.onclick = () => {
+    badge.remove();
+    if (dock.children.length === 0) dock.classList.add('hidden');
+    onRestore();
+  };
+  dock.appendChild(badge);
+}
+
+// Table Lightbox Modal Functions (Fits table auto-proportionally)
 function openTableLightbox(tableElem, captionTitle) {
   const tableModal = document.getElementById('table-lightbox');
   const tableTitle = document.getElementById('table-lightbox-title');
   const tableContent = document.getElementById('table-lightbox-content');
 
-  if (tableTitle) tableTitle.innerText = captionTitle || 'Table';
+  if (tableTitle) tableTitle.innerText = captionTitle || 'Table Viewer';
   if (tableContent && tableElem) {
     const cleanTbl = tableElem.cloneNode(true);
     cleanTbl.removeAttribute('id');
-    tableContent.innerHTML = cleanTbl.outerHTML;
+    cleanTbl.removeAttribute('width');
+    cleanTbl.removeAttribute('height');
+    cleanTbl.style.width = '100%';
+    cleanTbl.style.maxWidth = '100%';
+    cleanTbl.style.height = 'auto';
+    cleanTbl.querySelectorAll('[style]').forEach(el => {
+      el.style.width = '';
+      el.style.height = '';
+      el.style.fontSize = '';
+    });
+    tableContent.innerHTML = '';
+    tableContent.appendChild(cleanTbl);
   }
   if (tableModal) tableModal.classList.remove('hidden');
 }
@@ -1112,6 +1306,9 @@ function closeTableLightbox() {
 
 // Lightbox Open Function (supports index or direct src/caption)
 function openLightbox(val, captionOverride) {
+  resetImageTransform();
+  const windowTitleText = document.getElementById('window-title');
+
   if (typeof val === 'number') {
     if (!currentFigureList || currentFigureList.length === 0) return;
     currentFigureIndex = (val + currentFigureList.length) % currentFigureList.length;
@@ -1124,6 +1321,10 @@ function openLightbox(val, captionOverride) {
       lightboxCounter.innerText = `Figure ${currentFigureIndex + 1} of ${currentFigureList.length}`;
     }
 
+    if (windowTitleText) {
+      windowTitleText.innerText = item.alt ? `Exhibit: ${item.alt}` : `Figure ${currentFigureIndex + 1} of ${currentFigureList.length}`;
+    }
+
     if (lightboxPrev && lightboxNext) {
       const showNav = currentFigureList.length > 1;
       lightboxPrev.style.display = showNav ? 'flex' : 'none';
@@ -1133,6 +1334,7 @@ function openLightbox(val, captionOverride) {
     lightboxImg.src = val;
     lightboxCaption.innerText = captionOverride || '';
     if (lightboxCounter) lightboxCounter.innerText = '';
+    if (windowTitleText) windowTitleText.innerText = 'Exhibit Viewer';
     if (lightboxPrev && lightboxNext) {
       lightboxPrev.style.display = 'none';
       lightboxNext.style.display = 'none';
