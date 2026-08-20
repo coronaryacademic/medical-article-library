@@ -20,7 +20,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v36.0 (Unbroken Paragraph Flow & Isolated Exhibit Assets)';
+    const SCRIPT_VERSION = 'v37.0 (Preserve Full Article Content & Original Subheadings)';
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -360,17 +360,7 @@
             h.replaceWith(cleanH2);
         });
 
-        // Convert <p><strong>Subheading</strong></p> inside section body into <h2> subheadings
-        clone.querySelectorAll('p, div').forEach(el => {
-            if (el.children.length === 1 && el.children[0].tagName === 'STRONG') {
-                const text = el.children[0].innerText.trim();
-                if (text && text.length > 2 && text.length < 80 && !text.endsWith('.')) {
-                    const h2 = document.createElement('h2');
-                    h2.innerText = text;
-                    el.replaceWith(h2);
-                }
-            }
-        });
+        // Keep native subheadings clean without altering paragraph text
 
         // 5. Replace exhibit buttons in clone with inline text references, and isolate hidden assets at the end
         const exhibitButtonsInClone = Array.from(clone.querySelectorAll('button[id^="exhibit-"]'));

@@ -1303,8 +1303,8 @@ function processFigureAndTableLinks(container) {
 
   const figRegex = /(?:\(\(|\(|\[)?\s*\b(Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*(\d+[A-Za-z]?)\b\s*(?:\)\)|\)|\])?/gi;
 
-  const cameraIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 512 512" fill="currentColor"><path d="M149.1 64c-11.4 0-21.8 6.4-27.1 16.5L100.8 128H48C21.5 128 0 149.5 0 176V432c0 26.5 21.5 48 48 48H464c26.5 0 48-21.5 48-48V176c0-26.5-21.5-48-48-48H411.2l-21.2-47.5c-5.3-10.1-15.7-16.5-27.1-16.5H149.1zM256 208a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/></svg>`;
-  const tableIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 512 512" fill="currentColor"><path d="M64 256l0-96 160 0 0 96L64 256zm0 64l160 0 0 96L64 416l0-96zm224 96l0-96 160 0 0 96-160 0zM448 256l-160 0 0-96 160 0 0 96zM64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32z"/></svg>`;
+  const cameraIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/></svg>`;
+  const tableIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 4v4h7V7H4zm9 0v4h7V7h-7zm-9 6v4h7v-4H4zm9 0v4h7v-4h-7z"/></svg>`;
 
   textNodes.forEach(node => {
     const text = node.nodeValue;

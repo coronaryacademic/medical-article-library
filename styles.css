@@ -476,22 +476,23 @@ body {
 /* Body Content Typography */
 .article-body {
   font-family: var(--font-sans);
-  font-size: 1.05rem;
-  line-height: 1.7;
+  font-size: 1.02rem;
+  line-height: 1.52;
   color: #1e293b;
 }
 
 .article-body p {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
 .article-body ul, .article-body ol {
-  margin-bottom: 18px;
-  padding-left: 24px;
+  margin-bottom: 10px;
+  padding-left: 20px;
 }
 
 .article-body li {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  line-height: 1.5;
 }
 
 /* FORCE HIDE ALL INLINE IMAGES IN ARTICLE BODY PARAGRAPHS */
@@ -509,17 +510,17 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 32px;
-  margin-bottom: 12px;
+  margin-top: 24px;
+  margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid #e2e8f0;
   transition: color 0.15s ease;
 }
 
-h1.collapsible-heading { font-size: 1.5rem; }
-h2.collapsible-heading { font-size: 1.35rem; }
-h3.collapsible-heading { font-size: 1.15rem; }
-h4.collapsible-heading { font-size: 1.05rem; }
+h1.collapsible-heading { font-size: 1.4rem; }
+h2.collapsible-heading { font-size: 1.25rem; }
+h3.collapsible-heading { font-size: 1.1rem; }
+h4.collapsible-heading { font-size: 1.0rem; }
 
 .collapsible-heading:hover {
   color: var(--primary-600);
@@ -546,24 +547,19 @@ h4.collapsible-heading { font-size: 1.05rem; }
 }
 
 /* Native Section Subheadings (Matching Original Article Layout) */
-.article-subheading {
+.article-subheading, h2.article-subheading, h3.article-subheading, h4.article-subheading {
   font-family: var(--font-sans);
-  color: #1e3a8a;
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin-top: 24px;
-  margin-bottom: 10px;
-  padding-bottom: 4px;
-  border-bottom: 1px dashed #e2e8f0;
-}
-
-h3.article-subheading {
-  font-size: 1.05rem;
   color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 16px;
+  margin-bottom: 6px;
+  padding-bottom: 0;
+  border-bottom: none !important;
 }
 
 /* ==========================================
-   Coursology High-Fidelity Exhibit Pill Buttons
+   Coursology Original Hyperlink Exhibit Links
    ========================================== */
 .exhibit-ref-wrapper {
   display: inline;
@@ -573,43 +569,43 @@ h3.article-subheading {
 .exhibit-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background-color: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
-  padding: 3px 12px;
-  border-radius: 9999px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  gap: 3px;
+  background: transparent !important;
+  color: #2563eb !important;
+  border: none !important;
+  padding: 0 2px !important;
+  font-size: 0.95rem;
+  font-weight: 500;
   cursor: pointer;
-  margin: 0 4px;
-  vertical-align: middle;
-  transition: all 0.15s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  margin: 0 2px;
+  vertical-align: baseline;
+  box-shadow: none !important;
   white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
 }
 
 .exhibit-btn:hover {
-  background-color: #dbeafe;
-  color: #1d4ed8;
-  border-color: #93c5fd;
-  transform: translateY(-1px);
+  color: #1d4ed8 !important;
+  text-decoration: underline;
+  transform: none !important;
 }
 
 .exhibit-btn.table-link {
-  background-color: #f0fdf4;
-  color: #16a34a;
-  border-color: #bbf7d0;
+  background: transparent !important;
+  color: #2563eb !important;
+  border: none !important;
 }
 .exhibit-btn.table-link:hover {
-  background-color: #dcfce7;
-  color: #15803d;
+  color: #1d4ed8 !important;
 }
 
 .svg-icon-sm {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
+  color: #3b82f6;
 }
 
 /* ==========================================
