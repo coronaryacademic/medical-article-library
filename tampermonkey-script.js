@@ -20,7 +20,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v34.0 (Normalized Exhibit Mapping)';
+    const SCRIPT_VERSION = 'v36.0 (Unbroken Paragraph Flow & Isolated Exhibit Assets)';
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -70,6 +70,9 @@
             replacement: function(content, node) {
                 const clone = node.cloneNode(true);
                 clone.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
+                if (node.getAttribute('data-exhibit-asset') === 'true' || node.style.display === 'none') {
+                    return clone.outerHTML;
+                }
                 return '\n\n' + clone.outerHTML + '\n\n';
             }
         });
@@ -369,9 +372,13 @@
             }
         });
 
-        // 5. Replace exhibit buttons in clone with text reference + hidden image asset for Lightbox modal
+        // 5. Replace exhibit buttons in clone with inline text references, and isolate hidden assets at the end
         const exhibitButtonsInClone = Array.from(clone.querySelectorAll('button[id^="exhibit-"]'));
         let imgFallbackIdx = 0;
+
+        const hiddenAssetsContainer = document.createElement('div');
+        hiddenAssetsContainer.setAttribute('data-exhibit-assets', 'true');
+        hiddenAssetsContainer.style.display = 'none';
 
         for (let idx = 0; idx < exhibitButtonsInClone.length; idx++) {
             const btn = exhibitButtonsInClone[idx];
@@ -380,17 +387,18 @@
             let targetToReplace = (btn.parentElement && btn.parentElement.tagName === 'SPAN') ? btn.parentElement : btn;
 
             const captured = capturedPngMap.get(btn.id) || capturedPngMap.get(btnText.toLowerCase());
-
-            const figureWrapper = document.createElement('span');
-            figureWrapper.className = 'exhibit-ref-wrapper';
-
             const labelToShow = (captured && captured.displayLabel) ? captured.displayLabel : btnText;
+
+            const textRefSpan = document.createElement('span');
+            textRefSpan.className = 'exhibit-ref-wrapper';
+            textRefSpan.innerText = `(${labelToShow})`;
 
             if (captured && captured.rawTable) {
                 const cleanTbl = captured.rawTable.cloneNode(true);
                 cleanTbl.removeAttribute('class');
+                cleanTbl.setAttribute('data-exhibit-asset', 'true');
                 cleanTbl.style.display = 'none';
-                figureWrapper.innerHTML = `<span>(${labelToShow})</span>` + cleanTbl.outerHTML;
+                hiddenAssetsContainer.appendChild(cleanTbl);
             } else {
                 let imgSrc = '';
                 if (captured && captured.imgSrc) {
@@ -401,13 +409,21 @@
                 }
 
                 if (imgSrc) {
-                    figureWrapper.innerHTML = `<span>(${labelToShow})</span><img src="${imgSrc}" alt="${labelToShow}" class="article-media-asset" data-exhibit-asset="true" style="display:none;" />`;
-                } else {
-                    figureWrapper.innerHTML = `<span>(${labelToShow})</span>`;
+                    const imgEl = document.createElement('img');
+                    imgEl.src = imgSrc;
+                    imgEl.alt = labelToShow;
+                    imgEl.className = 'article-media-asset';
+                    imgEl.setAttribute('data-exhibit-asset', 'true');
+                    imgEl.style.display = 'none';
+                    hiddenAssetsContainer.appendChild(imgEl);
                 }
             }
 
-            targetToReplace.replaceWith(figureWrapper);
+            targetToReplace.replaceWith(textRefSpan);
+        }
+
+        if (hiddenAssetsContainer.children.length > 0) {
+            clone.appendChild(hiddenAssetsContainer);
         }
 
         document.getElementById('coursology-overlay')?.remove();

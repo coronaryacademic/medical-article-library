@@ -985,21 +985,19 @@ function setupCollapsibleHeadings(container, mainTitleText = '') {
 
   const topHeadings = headingElements.filter(h => parseInt(h.tagName.charAt(1), 10) === minTagNum);
 
-  // Add chevron arrow & collapsible-heading class to all headings
+  // Add chevron arrow & collapsible-heading class ONLY to top-level main section headings
   headingElements.forEach((heading, idx) => {
     heading.id = `sec-heading-${idx + 1}`;
-    heading.classList.add('collapsible-heading');
-    if (heading.tagName === 'H1' || parseInt(heading.tagName.charAt(1), 10) === minTagNum) {
-      heading.classList.add('level-main');
+    if (topHeadings.includes(heading)) {
+      heading.classList.add('collapsible-heading', 'level-main');
+      if (!heading.querySelector('.heading-arrow')) {
+        const arrowSpan = document.createElement('span');
+        arrowSpan.className = 'heading-arrow';
+        arrowSpan.innerText = '›';
+        heading.prepend(arrowSpan);
+      }
     } else {
-      heading.classList.add('level-sub');
-    }
-
-    if (!heading.querySelector('.heading-arrow')) {
-      const arrowSpan = document.createElement('span');
-      arrowSpan.className = 'heading-arrow';
-      arrowSpan.innerText = '›';
-      heading.prepend(arrowSpan);
+      heading.classList.add('article-subheading', 'level-sub');
     }
   });
 
@@ -1026,7 +1024,7 @@ function setupCollapsibleHeadings(container, mainTitleText = '') {
       sectionNodes.forEach(node => mainSectionWrapper.appendChild(node));
     }
 
-    // Click H1 Main Section: Toggle section body (hides/shows ALL child subheadings & content!)
+    // Click H1 Main Section: Toggle main section body (expands/collapses all content & subheadings within it)
     h1Heading.onclick = (e) => {
       if (e.target.closest('a, button')) return;
       h1Heading.classList.toggle('collapsed');
@@ -1039,34 +1037,13 @@ function setupCollapsibleHeadings(container, mainTitleText = '') {
       }
     };
 
-    // Process H2 subheadings inside this mainSectionWrapper
+    // Process H2 subheadings inside this mainSectionWrapper for sidebar TOC
     const childH2s = Array.from(mainSectionWrapper.querySelectorAll('h2, h3, h4'));
     const subTocItems = [];
 
     childH2s.forEach((h2Heading) => {
       const h2Id = h2Heading.id;
       const h2Text = h2Heading.innerText.replace(/^›\s*/, '').trim();
-
-      const subNodes = [];
-      let subNext = h2Heading.nextElementSibling;
-      while (subNext) {
-        if (childH2s.includes(subNext)) break;
-        subNodes.push(subNext);
-        subNext = subNext.nextElementSibling;
-      }
-
-      if (subNodes.length > 0) {
-        const subWrapper = document.createElement('div');
-        subWrapper.className = 'h2-section-body';
-        h2Heading.parentNode.insertBefore(subWrapper, subNodes[0]);
-        subNodes.forEach(n => subWrapper.appendChild(n));
-
-        h2Heading.onclick = (e) => {
-          if (e.target.closest('a, button')) return;
-          h2Heading.classList.toggle('collapsed');
-          subWrapper.classList.toggle('collapsed');
-        };
-      }
 
       subTocItems.push({
         id: h2Id,
