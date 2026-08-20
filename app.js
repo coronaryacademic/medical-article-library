@@ -863,19 +863,23 @@ function setupScrollSpy() {
   });
 }
 
-// Format and Wrap Tables to prevent tight / squished columns (Matching Image 2)
+// Format and Hide Inline Tables (Viewable only via exhibit pill buttons & media sidebar)
 function processTables(container) {
   const tables = container.querySelectorAll('table');
   tables.forEach(table => {
     if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
       const wrapper = document.createElement('div');
       wrapper.className = 'table-wrapper';
+      wrapper.style.display = 'none';
       table.parentNode.insertBefore(wrapper, table);
       wrapper.appendChild(table);
+    } else if (table.parentElement) {
+      table.parentElement.style.display = 'none';
     }
 
-    table.removeAttribute('style');
+    table.style.display = 'none';
     table.classList.add('coursology-medical-table');
+    table.setAttribute('data-exhibit-asset', 'true');
 
     table.querySelectorAll('th, td').forEach(cell => {
       cell.style.padding = '12px 18px';
@@ -1577,6 +1581,7 @@ function openTableLightbox(tableElem, captionTitle) {
     cleanTbl.removeAttribute('id');
     cleanTbl.removeAttribute('width');
     cleanTbl.removeAttribute('height');
+    cleanTbl.style.display = 'table';
     cleanTbl.style.width = '100%';
     cleanTbl.style.maxWidth = '100%';
     cleanTbl.style.height = 'auto';

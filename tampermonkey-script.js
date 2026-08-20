@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Coursology Deep Article Extractor (With Figures & Tables)
 // @namespace    http://tampermonkey.net/
-// @version      32.1
+// @version      34.0
 // @description  Clicks each figure/table popup to capture dynamic content, then exports as clean Markdown.
 // @match        *://*/*
 // @include      http://*/*
@@ -20,7 +20,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v33.1 (Table Capture Fix)';
+    const SCRIPT_VERSION = 'v34.0 (Normalized Exhibit Mapping)';
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -71,6 +71,18 @@
                 const clone = node.cloneNode(true);
                 clone.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
                 return '\n\n' + clone.outerHTML + '\n\n';
+            }
+        });
+
+        // Keep exhibit wrappers and exhibit media assets as clean raw HTML
+        turndownService.addRule('preserveExhibitAssets', {
+            filter: function(node) {
+                if (node.classList && node.classList.contains('exhibit-ref-wrapper')) return true;
+                if (node.tagName.toLowerCase() === 'img' && node.getAttribute('data-exhibit-asset') === 'true') return true;
+                return false;
+            },
+            replacement: function(content, node) {
+                return node.outerHTML;
             }
         });
 
@@ -196,6 +208,10 @@
 
         console.log(`[Coursology Extractor] Starting extraction. Found ${exhibitTriggers.length} exhibit triggers.`);
 
+        let seqFigure = 0;
+        let seqTable = 0;
+        let seqVideo = 0;
+
         for (let i = 0; i < exhibitTriggers.length; i++) {
             const btn = exhibitTriggers[i];
             const btnText = btn.innerText.trim() || `exhibit ${i + 1}`;
@@ -248,9 +264,19 @@
                 popupTitle = (newImg.alt || newImg.title).trim();
             }
 
-            let displayLabel = btnText;
-            if (popupTitle && /figure|table|fig|tbl/i.test(popupTitle)) {
-                displayLabel = popupTitle;
+            const isTable = newTable || /table|tbl/i.test(btnText) || /table|tbl/i.test(popupTitle);
+            const isVideo = /video|play/i.test(btnText) || /video/i.test(popupTitle);
+
+            let displayLabel = '';
+            if (isTable) {
+                seqTable++;
+                displayLabel = `Table ${seqTable}`;
+            } else if (isVideo) {
+                seqVideo++;
+                displayLabel = `Video ${seqVideo}`;
+            } else {
+                seqFigure++;
+                displayLabel = `Figure ${seqFigure}`;
             }
 
             if (newTable) {
