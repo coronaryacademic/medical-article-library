@@ -20,7 +20,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v32.0 (CORS-Bypass Embedded)';
+    const SCRIPT_VERSION = 'v33.1 (Table Capture Fix)';
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -29,9 +29,6 @@
         }
         if (typeof turndownPluginGfm === 'undefined') {
             await loadScript('https://unpkg.com/turndown-plugin-gfm/dist/turndown-plugin-gfm.js');
-        }
-        if (typeof html2canvas === 'undefined') {
-            await loadScript('https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js');
         }
     }
 
@@ -50,116 +47,6 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // ─── Image Compression Helper (Reduces base64 size by 90-95%) ────────────
-    function compressImageDataUrl(dataUrl, maxDimension = 1100, quality = 0.70) {
-        return new Promise((resolve) => {
-            if (!dataUrl || !dataUrl.startsWith('data:image')) {
-                return resolve(dataUrl);
-            }
-            const img = new Image();
-            img.onload = () => {
-                let width = img.naturalWidth || img.width;
-                let height = img.naturalHeight || img.height;
-                if (!width || !height) return resolve(dataUrl);
-
-                if (width > maxDimension || height > maxDimension) {
-                    if (width > height) {
-                        height = Math.round((height * maxDimension) / width);
-                        width = maxDimension;
-                    } else {
-                        width = Math.round((width * maxDimension) / height);
-                        height = maxDimension;
-                    }
-                }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, width, height);
-                ctx.drawImage(img, 0, 0, width, height);
-
-                const compressed = canvas.toDataURL('image/jpeg', quality);
-                resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
-            };
-            img.onerror = () => resolve(dataUrl);
-            img.src = dataUrl;
-        });
-    }
-
-    // ─── Convert Canvas / Image element to Data URL ─────────────────────────
-    function convertViaCanvas(url) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.onload = () => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = Math.min(img.naturalWidth || img.width || 600, 1100);
-                    const scaleRatio = canvas.width / (img.naturalWidth || img.width || 600);
-                    canvas.height = Math.round((img.naturalHeight || img.height || 400) * scaleRatio);
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const compressed = canvas.toDataURL('image/jpeg', 0.70);
-                    resolve(compressed);
-                } catch (e) {
-                    resolve(url);
-                }
-            };
-            img.onerror = () => resolve(url);
-            img.src = url;
-        });
-    }
-
-    // ─── Fetch image URL → base64 data URI (Bypasses CORS via GM_xmlhttpRequest) ─
-    function imgUrlToBase64(url) {
-        if (!url || url.startsWith('data:')) return Promise.resolve(url);
-
-        return new Promise((resolve) => {
-            // Priority 1: Tampermonkey GM_xmlhttpRequest (Bypasses CORS entirely)
-            if (typeof GM_xmlhttpRequest !== 'undefined') {
-                GM_xmlhttpRequest({
-                    method: 'GET',
-                    url: url,
-                    responseType: 'blob',
-                    onload: function(response) {
-                        if (response.status >= 200 && response.status < 300 && response.response) {
-                            const reader = new FileReader();
-                            reader.onload = async () => {
-                                const compressed = await compressImageDataUrl(reader.result);
-                                resolve(compressed);
-                            };
-                            reader.onerror = async () => resolve(await convertViaCanvas(url));
-                            reader.readAsDataURL(response.response);
-                        } else {
-                            convertViaCanvas(url).then(resolve);
-                        }
-                    },
-                    onerror: function() {
-                        convertViaCanvas(url).then(resolve);
-                    }
-                });
-                return;
-            }
-
-            // Priority 2: Standard fetch fallback
-            fetch(url, { mode: 'cors', credentials: 'include' })
-                .then(res => res.blob())
-                .then(blob => {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        const compressed = await compressImageDataUrl(reader.result);
-                        resolve(compressed);
-                    };
-                    reader.onerror = async () => resolve(await convertViaCanvas(url));
-                    reader.readAsDataURL(blob);
-                })
-                .catch(async () => resolve(await convertViaCanvas(url)));
-        });
-    }
 
     // ─── Turndown Config ────────────────────────────────────────────────────
     function createTurndownInstance() {
@@ -366,42 +253,18 @@
                 displayLabel = popupTitle;
             }
 
-            if (newTable && typeof html2canvas !== 'undefined') {
-                console.log(`[Coursology Extractor] Found table for ${displayLabel}. Snapshotting with html2canvas...`);
-                try {
-                    // Enforce generous width, padding and spacing on table before snapshot
-                    newTable.style.minWidth = '650px';
-                    newTable.style.width = '100%';
-                    newTable.style.backgroundColor = '#ffffff';
-                    newTable.style.borderCollapse = 'collapse';
-                    newTable.querySelectorAll('td, th').forEach(cell => {
-                        cell.style.padding = '12px 16px';
-                        cell.style.lineHeight = '1.5';
-                        cell.style.fontSize = '14px';
-                    });
-
-                    const canvas = await html2canvas(newTable, {
-                        backgroundColor: '#ffffff',
-                        scale: 2,
-                        logging: false,
-                        useCORS: true
-                    });
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                    capturedPngMap.set(btn.id, { imgDataUrl: dataUrl, btnText, displayLabel });
-                    capturedPngMap.set(btnText.toLowerCase(), { imgDataUrl: dataUrl, btnText, displayLabel });
-                    console.log(`[Coursology Extractor] SUCCESS: Snapshotted table for ${displayLabel} (${dataUrl.slice(0, 50)}...)`);
-                } catch (e) {
-                    console.warn(`[Coursology Extractor] html2canvas failed for ${displayLabel}, saving raw HTML table:`, e);
-                    capturedPngMap.set(btn.id, { rawTable: newTable.cloneNode(true), btnText, displayLabel });
-                    capturedPngMap.set(btnText.toLowerCase(), { rawTable: newTable.cloneNode(true), btnText, displayLabel });
-                }
+            if (newTable) {
+                console.log(`[Coursology Extractor] Found table for ${displayLabel}. Saving raw HTML table...`);
+                const cleanTbl = newTable.cloneNode(true);
+                cleanTbl.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
+                capturedPngMap.set(btn.id, { rawTable: cleanTbl, btnText, displayLabel });
+                capturedPngMap.set(btnText.toLowerCase(), { rawTable: cleanTbl, btnText, displayLabel });
+                console.log(`[Coursology Extractor] SUCCESS: Stored raw HTML table for ${displayLabel}`);
             } else if (newImg) {
                 const absSrc = new URL(newImg.getAttribute('src') || newImg.src, window.location.href).href;
-                console.log(`[Coursology Extractor] Fetching & embedding image for ${displayLabel}: ${absSrc}`);
-                const base64Src = await imgUrlToBase64(absSrc);
-                capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText, displayLabel });
-                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText, displayLabel });
-                console.log(`[Coursology Extractor] Embedded figure image for ${displayLabel} (${base64Src.slice(0, 40)}...)`);
+                capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel });
+                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel });
+                console.log(`[Coursology Extractor] Stored CDN image URL for ${displayLabel}: ${absSrc}`);
             } else {
                 console.log(`[Coursology Extractor] No popup table or image found in DOM for ${displayLabel}. Checking container fallback...`);
             }
@@ -412,11 +275,10 @@
                 const containerHtml = btnContainer ? btnContainer.outerHTML : '';
                 const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|webp|gif|svg)/i);
                 if (cdnMatch) {
-                    console.log(`[Coursology Extractor] Fetching & embedding CDN fallback for ${displayLabel}: ${cdnMatch[0]}`);
-                    const base64Src = await imgUrlToBase64(cdnMatch[0]);
-                    capturedPngMap.set(btn.id, { imgSrc: base64Src, btnText, displayLabel });
-                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: base64Src, btnText, displayLabel });
-                    console.log(`[Coursology Extractor] Embedded CDN fallback for ${displayLabel} (${base64Src.slice(0, 40)}...)`);
+                    const absSrc = cdnMatch[0];
+                    capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel });
+                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel });
+                    console.log(`[Coursology Extractor] Stored CDN URL fallback for ${displayLabel}: ${absSrc}`);
                 } else {
                     console.warn(`[Coursology Extractor] Nothing captured for: ${displayLabel}`);
                 }
@@ -496,26 +358,27 @@
             const figureWrapper = document.createElement('span');
             figureWrapper.className = 'exhibit-ref-wrapper';
 
-            let imgSrc = '';
-            if (captured && captured.imgDataUrl) imgSrc = captured.imgDataUrl;
-            else if (captured && captured.imgSrc) imgSrc = captured.imgSrc;
-            else if (pageMediaUrls[imgFallbackIdx]) {
-                const rawFallbackUrl = new URL(pageMediaUrls[imgFallbackIdx], window.location.href).href;
-                imgFallbackIdx++;
-                imgSrc = await imgUrlToBase64(rawFallbackUrl);
-            }
-
             const labelToShow = (captured && captured.displayLabel) ? captured.displayLabel : btnText;
 
-            if (imgSrc) {
-                figureWrapper.innerHTML = `<span>(${labelToShow})</span><img src="${imgSrc}" alt="${labelToShow}" class="article-media-asset" style="display:none;" />`;
-            } else if (captured && captured.rawTable) {
+            if (captured && captured.rawTable) {
                 const cleanTbl = captured.rawTable.cloneNode(true);
                 cleanTbl.removeAttribute('class');
                 cleanTbl.style.display = 'none';
                 figureWrapper.innerHTML = `<span>(${labelToShow})</span>` + cleanTbl.outerHTML;
             } else {
-                figureWrapper.innerHTML = `<span>(${labelToShow})</span>`;
+                let imgSrc = '';
+                if (captured && captured.imgSrc) {
+                    imgSrc = captured.imgSrc;
+                } else if (!captured && pageMediaUrls[imgFallbackIdx]) {
+                    imgSrc = new URL(pageMediaUrls[imgFallbackIdx], window.location.href).href;
+                    imgFallbackIdx++;
+                }
+
+                if (imgSrc) {
+                    figureWrapper.innerHTML = `<span>(${labelToShow})</span><img src="${imgSrc}" alt="${labelToShow}" class="article-media-asset" data-exhibit-asset="true" style="display:none;" />`;
+                } else {
+                    figureWrapper.innerHTML = `<span>(${labelToShow})</span>`;
+                }
             }
 
             targetToReplace.replaceWith(figureWrapper);
@@ -523,15 +386,13 @@
 
         document.getElementById('coursology-overlay')?.remove();
 
-        // 5. Convert all remaining images in clone to offline base64 data URIs
+        // 5. Resolve all remaining images in clone to clean CDN URLs
         const remainingImgs = Array.from(clone.querySelectorAll('img'));
         for (const img of remainingImgs) {
             const src = img.getAttribute('src') || img.getAttribute('data-src') || img.src;
             if (src && !src.startsWith('data:')) {
                 const absUrl = new URL(src, window.location.href).href;
-                console.log(`[Coursology Extractor] Embedding inline article image as base64: ${absUrl}`);
-                const b64 = await imgUrlToBase64(absUrl);
-                img.src = b64;
+                img.src = absUrl;
                 img.removeAttribute('srcset');
                 img.removeAttribute('data-src');
             }
