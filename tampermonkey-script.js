@@ -20,7 +20,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v37.0 (Preserve Full Article Content & Original Subheadings)';
+    const SCRIPT_VERSION = 'v41.0 (Video Buttons & Paragraph Fix)';
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -77,15 +77,24 @@
             }
         });
 
-        // Keep exhibit wrappers and exhibit media assets as clean raw HTML
-        turndownService.addRule('preserveExhibitAssets', {
+        // Exhibit reference spans like (Video 1) stay inline — no newlines
+        turndownService.addRule('preserveExhibitRefSpans', {
             filter: function(node) {
-                if (node.classList && node.classList.contains('exhibit-ref-wrapper')) return true;
-                if (node.tagName.toLowerCase() === 'img' && node.getAttribute('data-exhibit-asset') === 'true') return true;
-                return false;
+                return node.classList && node.classList.contains('exhibit-ref-wrapper');
             },
             replacement: function(content, node) {
-                return node.outerHTML;
+                return node.innerText || node.textContent || '';
+            }
+        });
+
+        // Hidden exhibit media assets (img, video) preserved as raw HTML blocks
+        turndownService.addRule('preserveExhibitMediaAssets', {
+            filter: function(node) {
+                const tag = node.tagName ? node.tagName.toLowerCase() : '';
+                return (tag === 'img' || tag === 'video') && node.getAttribute('data-exhibit-asset') === 'true';
+            },
+            replacement: function(content, node) {
+                return '\n\n' + node.outerHTML + '\n\n';
             }
         });
 
@@ -230,26 +239,37 @@
             triggerClick(btn);
 
             let newTable = null;
+            let newVideo = null;
             let newImg = null;
 
-            // Poll DOM up to 4 times (1.2s max) to detect newly mounted table or image
+            // Poll DOM up to 4 times (1.2s max) to detect newly mounted table, video, or image
             for (let attempt = 1; attempt <= 4; attempt++) {
                 await sleep(300);
 
                 const tablesAfter = Array.from(document.querySelectorAll('table'));
                 const imgsAfter = Array.from(document.querySelectorAll('img'));
+                const videosAfter = Array.from(document.querySelectorAll('video, video source, iframe'));
 
                 newTable = tablesAfter.find(t => !tablesBefore.includes(t)) 
                         || document.querySelector('[data-is-open="true"] table')
                         || document.querySelector('[role="dialog"] table')
                         || document.querySelector('table');
 
+                newVideo = videosAfter.find(v => {
+                    const src = v.getAttribute('src') || v.src || '';
+                    return src.includes('coursology') || src.includes('.mp4') || src.includes('.webm') || src.includes('.mov') || src.includes('.m3u8');
+                }) || document.querySelector('[data-is-open="true"] video')
+                   || document.querySelector('[data-is-open="true"] source')
+                   || document.querySelector('[data-is-open="true"] iframe')
+                   || document.querySelector('[role="dialog"] video')
+                   || document.querySelector('[role="dialog"] source');
+
                 newImg = imgsAfter.find(img => !imgsBefore.has(img.src) && img.src.includes('coursology'))
                       || imgsAfter.find(img => !imgsBefore.has(img.src) && !img.src.includes('logo'))
                       || document.querySelector('[data-is-open="true"] img')
                       || document.querySelector('[role="dialog"] img');
 
-                if (newTable || newImg) {
+                if (newTable || newVideo || newImg) {
                     console.log(`[Coursology Extractor] Detected popup content on attempt ${attempt}!`);
                     break;
                 }
@@ -268,7 +288,7 @@
             }
 
             const isTable = newTable || /table|tbl/i.test(btnText) || /table|tbl/i.test(popupTitle);
-            const isVideo = /video|play/i.test(btnText) || /video/i.test(popupTitle);
+            const isVideo = newVideo || /video|play/i.test(btnText) || /video/i.test(popupTitle);
 
             let displayLabel = '';
             if (isTable) {
@@ -289,6 +309,18 @@
                 capturedPngMap.set(btn.id, { rawTable: cleanTbl, btnText, displayLabel });
                 capturedPngMap.set(btnText.toLowerCase(), { rawTable: cleanTbl, btnText, displayLabel });
                 console.log(`[Coursology Extractor] SUCCESS: Stored raw HTML table for ${displayLabel}`);
+            } else if (newVideo) {
+                let vSrc = newVideo.getAttribute('src') || newVideo.src || '';
+                if (!vSrc && newVideo.tagName.toLowerCase() === 'video') {
+                    const sourceChild = newVideo.querySelector('source');
+                    if (sourceChild) vSrc = sourceChild.getAttribute('src') || sourceChild.src || '';
+                }
+                if (vSrc) {
+                    const absSrc = new URL(vSrc, window.location.href).href;
+                    capturedPngMap.set(btn.id, { videoSrc: absSrc, btnText, displayLabel });
+                    capturedPngMap.set(btnText.toLowerCase(), { videoSrc: absSrc, btnText, displayLabel });
+                    console.log(`[Coursology Extractor] SUCCESS: Stored CDN Video URL for ${displayLabel}: ${absSrc}`);
+                }
             } else if (newImg) {
                 const absSrc = new URL(newImg.getAttribute('src') || newImg.src, window.location.href).href;
                 capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel });
@@ -302,11 +334,13 @@
             if (!capturedPngMap.has(btn.id)) {
                 const btnContainer = btn.closest('[data-is-open]') || btn.parentElement || btn;
                 const containerHtml = btnContainer ? btnContainer.outerHTML : '';
-                const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|webp|gif|svg)/i);
+                const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:mp4|webm|mov|m3u8|png|jpg|jpeg|webp|gif|svg)/i);
                 if (cdnMatch) {
                     const absSrc = cdnMatch[0];
-                    capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel });
-                    capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel });
+                    const isVidCdn = /\.(?:mp4|webm|mov|m3u8)/i.test(absSrc);
+                    const assetObj = isVidCdn ? { videoSrc: absSrc, btnText, displayLabel } : { imgSrc: absSrc, btnText, displayLabel };
+                    capturedPngMap.set(btn.id, assetObj);
+                    capturedPngMap.set(btnText.toLowerCase(), assetObj);
                     console.log(`[Coursology Extractor] Stored CDN URL fallback for ${displayLabel}: ${absSrc}`);
                 } else {
                     console.warn(`[Coursology Extractor] Nothing captured for: ${displayLabel}`);
@@ -389,6 +423,15 @@
                 cleanTbl.setAttribute('data-exhibit-asset', 'true');
                 cleanTbl.style.display = 'none';
                 hiddenAssetsContainer.appendChild(cleanTbl);
+            } else if (captured && captured.videoSrc) {
+                const videoEl = document.createElement('video');
+                videoEl.src = captured.videoSrc;
+                videoEl.controls = true;
+                videoEl.className = 'article-media-asset';
+                videoEl.setAttribute('data-exhibit-asset', 'true');
+                videoEl.setAttribute('data-is-video', 'true');
+                videoEl.style.display = 'none';
+                hiddenAssetsContainer.appendChild(videoEl);
             } else {
                 let imgSrc = '';
                 if (captured && captured.imgSrc) {
@@ -481,7 +524,7 @@ ${markdownBody}
             alert('Extraction failed: ' + e.message);
         } finally {
             if (btn) {
-                btn.innerHTML = `Copy Article MD (${SCRIPT_VERSION})`;
+                btn.innerHTML = `Copy MD (${SCRIPT_VERSION.split(' ')[0]})`;
                 btn.disabled = false;
             }
         }
@@ -498,25 +541,24 @@ ${markdownBody}
 
         const btn = document.createElement('button');
         btn.id = 'coursology-extract-btn';
-        btn.innerHTML = `Copy Article MD (${SCRIPT_VERSION})`;
+        btn.innerHTML = `Copy MD (${SCRIPT_VERSION.split(' ')[0]})`;
         btn.style.cssText = `
             position: fixed !important;
-            bottom: 25px !important;
-            right: 25px !important;
+            top: 15px !important;
+            left: 15px !important;
             z-index: 2147483647 !important;
-            padding: 14px 24px !important;
+            padding: 6px 12px !important;
             background: #2563eb !important;
             color: #FFFFFF !important;
             font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
-            font-size: 15px !important;
-            font-weight: bold !important;
-            border: 2px solid #FFFFFF !important;
-            border-radius: 50px !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            border: 1px solid rgba(255,255,255,0.8) !important;
+            border-radius: 6px !important;
             cursor: pointer !important;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.4) !important;
-            min-width: 170px !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25) !important;
             text-align: center !important;
-            line-height: 1 !important;
+            line-height: 1.2 !important;
             pointer-events: auto !important;
             display: block !important;
             visibility: visible !important;

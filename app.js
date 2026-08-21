@@ -91,8 +91,29 @@ let startPanX = 0;
 let startPanY = 0;
 
 function updateImageTransform() {
-  if (!lightboxImg) return;
-  lightboxImg.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom}) rotate(${imgRotation}deg)`;
+  if (lightboxImg && lightboxImg.offsetParent !== null) {
+    lightboxImg.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom}) rotate(${imgRotation}deg)`;
+  }
+
+  const tblViewport = document.getElementById('lb-table-viewport');
+  if (tblViewport && tblViewport.offsetParent !== null) {
+    const tblElem = tblViewport.querySelector('table');
+    if (tblElem) {
+      tblElem.style.transformOrigin = 'center top';
+      tblElem.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom})`;
+      tblElem.style.transition = 'transform 0.1s ease-out';
+    }
+  }
+
+  const standTableContent = document.getElementById('table-lightbox-content');
+  if (standTableContent && standTableContent.offsetParent !== null) {
+    const tblElem = standTableContent.querySelector('table');
+    if (tblElem) {
+      tblElem.style.transformOrigin = 'center top';
+      tblElem.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom})`;
+      tblElem.style.transition = 'transform 0.1s ease-out';
+    }
+  }
 }
 
 function resetImageTransform() {
@@ -1101,41 +1122,15 @@ function renderMediaSidebar(container) {
   mediaTablesGrid.innerHTML = '';
 
   const tableSvgIcon = `<svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="table" class="media-thumb-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M64 256l0-96 160 0 0 96L64 256zm0 64l160 0 0 96L64 416l0-96zm224 96l0-96 160 0 0 96-160 0zM448 256l-160 0 0-96 160 0 0 96zM64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32z"></path></svg>`;
+  const videoPlayIcon = `<svg viewBox="0 0 24 24" fill="currentColor" class="media-thumb-icon" style="color:#2563eb;width:36px;height:36px;"><path d="M8 5v14l11-7z"/></svg>`;
 
-  const figuresList = [];
-  const tablesList = [];
-
-  // Categorize images into figures vs captured table images
-  currentFigureList.forEach((item, idx) => {
-    const isTableImg = item.alt && /table|tbl/i.test(item.alt);
-    if (isTableImg) {
-      tablesList.push({ ...item, type: 'img' });
-    } else {
-      figuresList.push({ ...item, type: 'img' });
-    }
-  });
-
-  // Collect raw HTML tables
-  const htmlTables = Array.from(container.querySelectorAll('table'));
-  htmlTables.forEach((tbl, idx) => {
-    const tblNum = idx + 1;
-    tablesList.push({
-      type: 'table',
-      element: tbl,
-      caption: tbl.querySelector('caption')?.innerText?.trim() || `Table ${tblNum}`,
-      label: `table ${tblNum}`
-    });
-  });
+  const figuresList = currentFigureList.filter(i => i.isImage);
+  const videosList = currentFigureList.filter(i => i.isVideo);
+  const tablesList = currentFigureList.filter(i => i.isTable);
 
   // Render Figures Section
-  figuresList.forEach((fig, i) => {
-    const defaultNum = i + 1;
-    let labelText = (fig.alt || fig.title || '').trim();
-    if (!labelText) {
-      labelText = `figure ${defaultNum}`;
-    }
-    labelText = labelText.replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
-
+  figuresList.forEach((fig) => {
+    const labelText = (fig.alt || `figure ${fig.figNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'media-thumb-btn';
@@ -1145,42 +1140,39 @@ function renderMediaSidebar(container) {
       </div>
       <p class="media-thumb-label">${labelText}</p>
     `;
-    btn.onclick = () => {
-      openLightbox(fig.index);
-    };
+    btn.onclick = () => openLightbox(fig.index);
+    mediaFiguresGrid.appendChild(btn);
+  });
+
+  // Render Videos Section (in figures grid)
+  videosList.forEach((vid) => {
+    const labelText = (vid.alt || `video ${vid.videoNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'media-thumb-btn';
+    btn.innerHTML = `
+      <div class="media-thumb-box" style="background:#eff6ff;display:flex;align-items:center;justify-content:center;">
+        ${videoPlayIcon}
+      </div>
+      <p class="media-thumb-label">${labelText}</p>
+    `;
+    btn.onclick = () => openLightbox(vid.index);
     mediaFiguresGrid.appendChild(btn);
   });
 
   // Render Tables Section
-  tablesList.forEach((tbl, i) => {
-    const tblNum = i + 1;
-    const labelText = tbl.label || `table ${tblNum}`;
+  tablesList.forEach((tbl) => {
+    const labelText = `table ${tbl.tableNum || 1}`;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'media-thumb-btn';
-
-    if (tbl.type === 'img') {
-      btn.innerHTML = `
-        <div class="media-thumb-box">
-          <img src="${tbl.src}" alt="${labelText}" loading="lazy" class="media-thumb-img">
-        </div>
-        <p class="media-thumb-label">${labelText}</p>
-      `;
-      btn.onclick = () => {
-        openLightbox(tbl.index);
-      };
-    } else {
-      btn.innerHTML = `
-        <div class="media-thumb-box">
-          ${tableSvgIcon}
-        </div>
-        <p class="media-thumb-label">${labelText}</p>
-      `;
-      btn.onclick = () => {
-        openTableLightbox(tbl.element, tbl.caption || labelText);
-      };
-    }
-
+    btn.innerHTML = `
+      <div class="media-thumb-box">
+        ${tableSvgIcon}
+      </div>
+      <p class="media-thumb-label">${labelText}</p>
+    `;
+    btn.onclick = () => openLightbox(tbl.index);
     mediaTablesGrid.appendChild(btn);
   });
 
@@ -1189,28 +1181,82 @@ function renderMediaSidebar(container) {
   if (toggleRightBtn) toggleRightBtn.classList.remove('hidden');
 }
 
-// Setup Lightbox Gallery Items - scans ALL images including hidden exhibit assets
+// Setup Lightbox Gallery Items - scans ALL images, videos, and tables in DOM order
 function setupLightboxGallery(container, defaultTitle) {
   currentFigureList = [];
 
-  // Select both regular images AND hidden exhibit asset images embedded by tampermonkey script
-  const images = Array.from(container.querySelectorAll('img'));
-  images.forEach((img, index) => {
-    const figNum = index + 1;
-    const altText = (img.alt || img.getAttribute('title') || '').trim();
-    const caption = altText || `Figure ${figNum}: ${defaultTitle}`;
+  const VIDEO_EXT_RE = /\.(mp4|webm|mov|m3u8|ogg)(\?.*)?$/i;
+  const elements = Array.from(container.querySelectorAll('img, video, table'));
+  
+  let figCounter = 0;
+  let videoCounter = 0;
+  let tableCounter = 0;
 
-    // Mark as an exhibit asset so the removal step below skips it
-    img.setAttribute('data-exhibit-asset', 'true');
-    if (!img.id) img.id = `fig-img-${figNum}`;
+  const hasHtmlTables = container.querySelector('table') !== null;
 
-    const figItem = {
-      src: img.src,
-      caption: caption,
-      element: img,
-      alt: altText,
-      index: index
-    };
+  elements.forEach((el) => {
+    const isTable = el.tagName === 'TABLE';
+    const elSrc = el.src || el.getAttribute('src') || '';
+    const altText = (el.getAttribute('alt') || el.getAttribute('title') || '').trim();
+
+    // Skip redundant image placeholders representing tables if real HTML tables are present
+    if (!isTable && hasHtmlTables && /^(table|tbl)\b/i.test(altText)) {
+      return;
+    }
+
+    const isVid = !isTable && (el.tagName === 'VIDEO'
+                 || el.getAttribute('data-is-video') === 'true'
+                 || VIDEO_EXT_RE.test(elSrc));
+
+    let figItem;
+
+    if (isTable) {
+      tableCounter++;
+      if (!el.id) el.id = `table-${tableCounter}`;
+      const caption = el.querySelector('caption')?.innerText?.trim() || `Table ${tableCounter}`;
+      figItem = {
+        isTable: true,
+        isVideo: false,
+        isImage: false,
+        element: el,
+        caption: caption,
+        alt: caption,
+        tableNum: tableCounter,
+        index: currentFigureList.length
+      };
+    } else if (isVid) {
+      videoCounter++;
+      const caption = altText || `Video ${videoCounter}: ${defaultTitle}`;
+      el.setAttribute('data-exhibit-asset', 'true');
+      if (!el.id) el.id = `video-asset-${videoCounter}`;
+      figItem = {
+        isVideo: true,
+        isTable: false,
+        isImage: false,
+        src: elSrc,
+        caption: caption,
+        element: el,
+        alt: altText,
+        videoNum: videoCounter,
+        index: currentFigureList.length
+      };
+    } else {
+      figCounter++;
+      const caption = altText || `Figure ${figCounter}: ${defaultTitle}`;
+      el.setAttribute('data-exhibit-asset', 'true');
+      if (!el.id) el.id = `media-asset-${figCounter}`;
+      figItem = {
+        isImage: true,
+        isVideo: false,
+        isTable: false,
+        src: elSrc,
+        caption: caption,
+        element: el,
+        alt: altText,
+        figNum: figCounter,
+        index: currentFigureList.length
+      };
+    }
 
     currentFigureList.push(figItem);
   });
@@ -1220,25 +1266,41 @@ function setupLightboxGallery(container, defaultTitle) {
 function processFigureAndTableLinks(container) {
   const figureMap = {};
 
-  // 1. Build map for figure images
+  // 1. Build map for figure images — with separate counters for videos vs figures
+  let figCounter = 0;
+  let videoCounter = 0;
   currentFigureList.forEach((item, index) => {
+    // Generic index-based keys (fallback)
     const figNum = index + 1;
-
-    figureMap[`figure ${figNum}`] = item;
-    figureMap[`fig ${figNum}`] = item;
-    figureMap[`fig. ${figNum}`] = item;
-    figureMap[`image ${figNum}`] = item;
-    figureMap[`img ${figNum}`] = item;
-    figureMap[`img. ${figNum}`] = item;
-    figureMap[`exhibit ${figNum}`] = item;
     figureMap[String(figNum)] = item;
 
+    if (item.isVideo) {
+      // Video-specific sequential keys
+      videoCounter++;
+      figureMap[`video ${videoCounter}`] = item;
+      figureMap[`vid ${videoCounter}`] = item;
+      figureMap[`video ${figNum}`] = item; // also by absolute index
+    } else {
+      // Figure/image sequential keys
+      figCounter++;
+      figureMap[`figure ${figCounter}`] = item;
+      figureMap[`fig ${figCounter}`] = item;
+      figureMap[`fig. ${figCounter}`] = item;
+      figureMap[`image ${figCounter}`] = item;
+      figureMap[`img ${figCounter}`] = item;
+      figureMap[`img. ${figCounter}`] = item;
+      figureMap[`exhibit ${figCounter}`] = item;
+      figureMap[`figure ${figNum}`] = item;
+      figureMap[`image ${figNum}`] = item;
+    }
+
     if (item.alt) {
-      const match = item.alt.match(/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*(\d+[A-Za-z]?)/i);
+      const match = item.alt.match(/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit|Video|Vid\.?)\s*(\d+[A-Za-z]?)/i);
       if (match) {
         const keyNum = match[1].toLowerCase();
         const isTab = match[0].toLowerCase().startsWith('tab');
-        const prefixStr = isTab ? 'table ' : 'figure ';
+        const isVidAlt = match[0].toLowerCase().startsWith('vid');
+        const prefixStr = isTab ? 'table ' : isVidAlt ? 'video ' : 'figure ';
         figureMap[`${prefixStr}${keyNum}`] = item;
         figureMap[`image ${keyNum}`] = item;
         figureMap[`img ${keyNum}`] = item;
@@ -1246,6 +1308,8 @@ function processFigureAndTableLinks(container) {
         if (isTab) {
           figureMap[`tbl ${keyNum}`] = item;
           figureMap[`tbl. ${keyNum}`] = item;
+        } else if (isVidAlt) {
+          figureMap[`vid ${keyNum}`] = item;
         } else {
           figureMap[`fig ${keyNum}`] = item;
           figureMap[`fig. ${keyNum}`] = item;
@@ -1288,7 +1352,7 @@ function processFigureAndTableLinks(container) {
         if (parent.classList && (parent.classList.contains('figure-link') || parent.classList.contains('exhibit-btn'))) {
           return NodeFilter.FILTER_REJECT;
         }
-        if (/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*\d+/i.test(node.nodeValue)) {
+        if (/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit|Video|Vid\.?)\s*\d+/i.test(node.nodeValue)) {
           return NodeFilter.FILTER_ACCEPT;
         }
         return NodeFilter.FILTER_SKIP;
@@ -1301,10 +1365,11 @@ function processFigureAndTableLinks(container) {
     textNodes.push(walker.currentNode);
   }
 
-  const figRegex = /(?:\(\(|\(|\[)?\s*\b(Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit)\s*(\d+[A-Za-z]?)\b\s*(?:\)\)|\)|\])?/gi;
+  const figRegex = /(?:\(\(|\(|\[)?\s*\b(Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit|Video|Vid\.?)\s*(\d+[A-Za-z]?)\b\s*(?:\)\)|\)|\])?/gi;
 
   const cameraIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/></svg>`;
   const tableIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 4v4h7V7H4zm9 0v4h7V7h-7zm-9 6v4h7v-4H4zm9 0v4h7v-4h-7z"/></svg>`;
+  const videoIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
 
   textNodes.forEach(node => {
     const text = node.nodeValue;
@@ -1323,22 +1388,28 @@ function processFigureAndTableLinks(container) {
       const fullMatch = match[0];
       const prefix = match[1];
       const num = match[2];
-      const isTable = prefix.toLowerCase().startsWith('tab');
+      const prefixLc = prefix.toLowerCase();
+      const isTable = prefixLc.startsWith('tab');
+      const isVideo = prefixLc.startsWith('vid');
       const cleanLabel = `${prefix} ${num}`;
 
-      const keyLower = `${prefix.toLowerCase()} ${num.toLowerCase()}`;
+      const keyLower = `${prefixLc} ${num.toLowerCase()}`;
       let target = figureMap[keyLower]
+        || figureMap[`video ${num.toLowerCase()}`]
         || figureMap[`image ${num.toLowerCase()}`]
         || figureMap[`figure ${num.toLowerCase()}`]
         || figureMap[`fig ${num.toLowerCase()}`]
+        || figureMap[`table ${num.toLowerCase()}`]
+        || figureMap[`tbl ${num.toLowerCase()}`]
         || figureMap[num.toLowerCase()];
 
       // Create High-Fidelity Exhibit Button
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = isTable ? 'exhibit-btn table-link' : 'exhibit-btn';
-      btn.innerHTML = `${isTable ? tableIconSvg : cameraIconSvg}<span>${cleanLabel}</span>`;
-      btn.title = `Click to view ${cleanLabel} popup`;
+      const btnIcon = isTable ? tableIconSvg : isVideo ? videoIconSvg : cameraIconSvg;
+      btn.innerHTML = `<span class="ex-paren">(</span>${btnIcon}<span class="ex-label">${cleanLabel}</span><span class="ex-paren">)</span>`;
+      btn.title = `Click to view (${cleanLabel}) popup`;
 
       btn.onclick = (e) => {
         e.preventDefault();
@@ -1391,7 +1462,6 @@ function processFigureAndTableLinks(container) {
 
 // Setup Mouse Drag Pan & Scroll Zoom
 function setupPanAndZoom() {
-  const viewport = document.getElementById('lightbox-viewport');
   const zoomInBtn = document.getElementById('tool-zoom-in');
   const zoomOutBtn = document.getElementById('tool-zoom-out');
   const zoomResetBtn = document.getElementById('tool-zoom-reset');
@@ -1402,8 +1472,14 @@ function setupPanAndZoom() {
   if (zoomResetBtn) zoomResetBtn.addEventListener('click', resetImageTransform);
   if (rotateBtn) rotateBtn.addEventListener('click', () => { imgRotation = (imgRotation + 90) % 360; updateImageTransform(); });
 
-  if (viewport) {
-    viewport.addEventListener('wheel', (e) => {
+  const viewports = [
+    document.getElementById('lightbox-viewport'),
+    document.getElementById('lb-table-viewport'),
+    document.getElementById('table-lightbox-content')
+  ].filter(Boolean);
+
+  viewports.forEach(vp => {
+    vp.addEventListener('wheel', (e) => {
       e.preventDefault();
       if (e.deltaY < 0) {
         imgZoom += 0.15;
@@ -1413,24 +1489,24 @@ function setupPanAndZoom() {
       updateImageTransform();
     }, { passive: false });
 
-    viewport.addEventListener('mousedown', (e) => {
-      if (e.target.closest('button')) return;
+    vp.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button') || e.target.closest('a')) return;
       isPanning = true;
       startPanX = e.clientX - imgPanX;
       startPanY = e.clientY - imgPanY;
     });
+  });
 
-    window.addEventListener('mousemove', (e) => {
-      if (!isPanning) return;
-      imgPanX = e.clientX - startPanX;
-      imgPanY = e.clientY - startPanY;
-      updateImageTransform();
-    });
+  window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    imgPanX = e.clientX - startPanX;
+    imgPanY = e.clientY - startPanY;
+    updateImageTransform();
+  });
 
-    window.addEventListener('mouseup', () => {
-      isPanning = false;
-    });
-  }
+  window.addEventListener('mouseup', () => {
+    isPanning = false;
+  });
 }
 
 // Setup Draggable & Resizable Window Controls
@@ -1461,52 +1537,61 @@ function setupWindowControls() {
 function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtnEl, maxBtnEl, closeBtnEl, defaultTitle) {
   let isDragging = false;
   let startX = 0, startY = 0;
-  let initialLeft = 0, initialTop = 0;
+  let currentX = 0, currentY = 0;
 
-  cardEl.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
+  const resetPos = () => {
+    currentX = 0;
+    currentY = 0;
+    cardEl.style.transform = 'translate3d(0px, 0px, 0px)';
+  };
+  cardEl._resetPos = resetPos;
 
-  headerEl.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.win-btn')) return;
-    if (cardEl.classList.contains('maximized')) return;
-    isDragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    
-    const rect = cardEl.getBoundingClientRect();
-    initialLeft = rect.left;
-    initialTop = rect.top;
+  if (headerEl) {
+    headerEl.style.cursor = 'grab';
 
-    cardEl.style.left = `${initialLeft}px`;
-    cardEl.style.top = `${initialTop}px`;
-    cardEl.style.margin = '0';
-  });
+    const onDragStart = (e) => {
+      if (e.target.closest('.win-btn') || e.target.closest('.lb-close-btn') || e.target.closest('.lb-nav-btn')) return;
+      if (cardEl.classList.contains('maximized')) return;
+      isDragging = true;
+      headerEl.style.cursor = 'grabbing';
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      startX = clientX - currentX;
+      startY = clientY - currentY;
+    };
 
-  window.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    
-    const newLeft = Math.max(0, Math.min(window.innerWidth - cardEl.offsetWidth, initialLeft + dx));
-    const newTop = Math.max(0, Math.min(window.innerHeight - cardEl.offsetHeight, initialTop + dy));
+    const onDragMove = (e) => {
+      if (!isDragging) return;
+      if (e.cancelable) e.preventDefault();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      currentX = clientX - startX;
+      currentY = clientY - startY;
 
-    cardEl.style.left = `${newLeft}px`;
-    cardEl.style.top = `${newTop}px`;
-  });
+      cardEl.style.transform = `translate3d(${currentX}px, ${currentY}px, 0px)`;
+    };
 
-  window.addEventListener('mouseup', () => {
-    isDragging = false;
-  });
+    const onDragEnd = () => {
+      isDragging = false;
+      headerEl.style.cursor = 'grab';
+    };
+
+    headerEl.addEventListener('mousedown', onDragStart);
+    headerEl.addEventListener('touchstart', onDragStart, { passive: true });
+
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('touchmove', onDragMove, { passive: false });
+
+    window.addEventListener('mouseup', onDragEnd);
+    window.addEventListener('touchend', onDragEnd);
+  }
 
   if (maxBtnEl) {
     maxBtnEl.addEventListener('click', (e) => {
       e.stopPropagation();
       cardEl.classList.toggle('maximized');
       if (!cardEl.classList.contains('maximized')) {
-        cardEl.style.left = '';
-        cardEl.style.top = '';
-        cardEl.style.margin = '';
+        resetPos();
       }
     });
   }
@@ -1515,7 +1600,7 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
     minBtnEl.addEventListener('click', (e) => {
       e.stopPropagation();
       modalParentEl.classList.add('hidden');
-      const windowTitleText = cardEl.querySelector('.window-title-text')?.innerText || defaultTitle;
+      const windowTitleText = cardEl.querySelector('.window-title-text, .lb-title')?.innerText || defaultTitle;
       addDockBadge(windowTitleText, () => {
         modalParentEl.classList.remove('hidden');
       });
@@ -1552,7 +1637,13 @@ function openTableLightbox(tableElem, captionTitle) {
   const tableTitle = document.getElementById('table-lightbox-title');
   const tableContent = document.getElementById('table-lightbox-content');
 
-  if (tableTitle) tableTitle.innerText = captionTitle || 'Table Viewer';
+  const container = document.getElementById('rendered-content');
+  const allTables = container ? Array.from(container.querySelectorAll('table')) : [];
+  const tblIndex = allTables.indexOf(tableElem) + 1;
+  const totalTables = allTables.length || 1;
+  const countLabel = `Table ${tblIndex > 0 ? tblIndex : 1} of ${totalTables}`;
+
+  if (tableTitle) tableTitle.innerText = captionTitle ? `${countLabel}: ${captionTitle}` : countLabel;
   if (tableContent && tableElem) {
     const cleanTbl = tableElem.cloneNode(true);
     cleanTbl.removeAttribute('id');
@@ -1579,8 +1670,12 @@ function closeTableLightbox() {
 }
 
 // Lightbox Open Function (supports index or direct src/caption)
-function openLightbox(val, captionOverride) {
+function openLightbox(val, captionOverride, isNavigating = false) {
   resetImageTransform();
+  const lbCard = document.getElementById('lightbox-window');
+  if (!isNavigating && lbCard && lbCard._resetPos) {
+    lbCard._resetPos();
+  }
   const windowTitleText = document.getElementById('window-title');
 
   if (typeof val === 'number') {
@@ -1588,15 +1683,82 @@ function openLightbox(val, captionOverride) {
     currentFigureIndex = (val + currentFigureList.length) % currentFigureList.length;
     const item = currentFigureList[currentFigureIndex];
 
-    lightboxImg.src = item.src;
-    lightboxCaption.innerText = item.caption;
+    const imgViewport = document.getElementById('lightbox-viewport');
+    const vidViewport = document.getElementById('lb-video-viewport');
+    const tblViewport = document.getElementById('lb-table-viewport');
+    const lbToolbar = document.getElementById('lb-toolbar');
+    const lightboxVid = document.getElementById('lightbox-video');
+
+    // Calculate category totals and positions
+    const videosList = currentFigureList.filter(i => i.isVideo);
+    const figuresList = currentFigureList.filter(i => i.isImage || (!i.isVideo && !i.isTable));
+    const tablesList = currentFigureList.filter(i => i.isTable);
+
+    const rotateBtn = document.getElementById('tool-rotate');
+
+    if (item.isTable) {
+      if (imgViewport) imgViewport.classList.add('hidden');
+      if (vidViewport) vidViewport.classList.add('hidden');
+      if (tblViewport) tblViewport.classList.remove('hidden');
+      if (lbToolbar) lbToolbar.classList.remove('hidden');
+      if (rotateBtn) rotateBtn.classList.add('hidden');
+      if (lightboxVid) lightboxVid.pause();
+
+      if (tblViewport && item.element) {
+        const cleanTbl = item.element.cloneNode(true);
+        cleanTbl.removeAttribute('id');
+        cleanTbl.style.display = 'table';
+        cleanTbl.style.width = '100%';
+        cleanTbl.style.maxWidth = '100%';
+        cleanTbl.style.height = 'auto';
+        cleanTbl.querySelectorAll('[style]').forEach(e => {
+          e.style.width = ''; e.style.height = ''; e.style.fontSize = '';
+        });
+        tblViewport.innerHTML = '';
+        tblViewport.appendChild(cleanTbl);
+      }
+    } else if (item.isVideo) {
+      if (imgViewport) imgViewport.classList.add('hidden');
+      if (tblViewport) tblViewport.classList.add('hidden');
+      if (vidViewport) vidViewport.classList.remove('hidden');
+      if (lbToolbar) lbToolbar.classList.add('hidden');
+
+      if (lightboxVid) {
+        lightboxVid.src = item.src;
+        lightboxVid.load();
+        lightboxVid.play().catch(() => {});
+      }
+    } else {
+      if (lightboxVid) lightboxVid.pause();
+      if (vidViewport) vidViewport.classList.add('hidden');
+      if (tblViewport) tblViewport.classList.add('hidden');
+      if (imgViewport) imgViewport.classList.remove('hidden');
+      if (lbToolbar) lbToolbar.classList.remove('hidden');
+      if (rotateBtn) rotateBtn.classList.remove('hidden');
+      lightboxImg.src = item.src;
+    }
+
+    lightboxCaption.innerText = item.caption || '';
+
+    // Calculate category specific index/total
+    let countText = '';
+    if (item.isTable) {
+      const tIdx = tablesList.indexOf(item) + 1;
+      countText = `Table ${tIdx > 0 ? tIdx : 1} of ${tablesList.length}`;
+    } else if (item.isVideo) {
+      const vIdx = videosList.indexOf(item) + 1;
+      countText = `Video ${vIdx > 0 ? vIdx : 1} of ${videosList.length}`;
+    } else {
+      const fIdx = figuresList.indexOf(item) + 1;
+      countText = `Figure ${fIdx > 0 ? fIdx : 1} of ${figuresList.length}`;
+    }
 
     if (lightboxCounter) {
-      lightboxCounter.innerText = `Figure ${currentFigureIndex + 1} of ${currentFigureList.length}`;
+      lightboxCounter.innerText = countText;
     }
 
     if (windowTitleText) {
-      windowTitleText.innerText = item.alt ? `Exhibit: ${item.alt}` : `Figure ${currentFigureIndex + 1} of ${currentFigureList.length}`;
+      windowTitleText.innerText = item.alt ? `Exhibit: ${item.alt}` : countText;
     }
 
     if (lightboxPrev && lightboxNext) {
@@ -1619,18 +1781,25 @@ function openLightbox(val, captionOverride) {
 }
 
 function closeLightbox() {
+  const lightboxVid = document.getElementById('lightbox-video');
+  if (lightboxVid) {
+    lightboxVid.pause();
+    lightboxVid.src = '';
+  }
   lightbox.classList.add('hidden');
 }
 
-function showNextFigure() {
+function showNextFigure(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
   if (currentFigureList.length > 0) {
-    openLightbox(currentFigureIndex + 1);
+    openLightbox(currentFigureIndex + 1, null, true);
   }
 }
 
-function showPrevFigure() {
+function showPrevFigure(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
   if (currentFigureList.length > 0) {
-    openLightbox(currentFigureIndex - 1);
+    openLightbox(currentFigureIndex - 1, null, true);
   }
 }
 

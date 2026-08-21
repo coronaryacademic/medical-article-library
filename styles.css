@@ -35,6 +35,12 @@ body {
   overflow: hidden;
 }
 
+body.dragging-active,
+body.dragging-active * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .app-layout {
   display: flex;
   height: 100vh;
@@ -569,21 +575,33 @@ h4.collapsible-heading { font-size: 1.0rem; }
 .exhibit-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 0px;
   background: transparent !important;
   color: #2563eb !important;
   border: none !important;
-  padding: 0 2px !important;
+  padding: 0 !important;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
-  margin: 0 2px;
+  margin: 0 1px;
   vertical-align: baseline;
   box-shadow: none !important;
   white-space: nowrap;
   text-decoration: underline;
   text-underline-offset: 2px;
   transition: color 0.15s ease;
+}
+
+.ex-paren {
+  color: var(--color-text, #1e293b) !important;
+  opacity: 1;
+  margin: 0;
+  padding: 0;
+  text-decoration: none !important;
+}
+
+.ex-label {
+  margin-left: 3px;
 }
 
 .exhibit-btn:hover {
@@ -773,6 +791,253 @@ table.coursology-medical-table td {
   transition: width 0.15s ease, height 0.15s ease, top 0.15s ease, left 0.15s ease;
 }
 
+/* Redesigned Modern Lightbox Card */
+.lb-card {
+  position: relative;
+  width: 860px;
+  max-width: 92vw;
+  height: 650px;
+  max-height: 88vh;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: lbPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lbPopIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.lb-header {
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+  height: 48px;
+  min-height: 48px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #1e293b;
+}
+
+.lb-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.lb-title {
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-counter {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.lb-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lb-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.lb-nav-btn:hover {
+  background: #334155;
+  color: #ffffff;
+  border-color: #475569;
+}
+
+.lb-nav-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.lb-sep {
+  width: 1px;
+  height: 20px;
+  background: #334155;
+  margin: 0 4px;
+}
+
+.lb-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.lb-close-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.lb-close-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.lb-toolbar {
+  position: relative;
+  z-index: 15;
+  flex-shrink: 0;
+  height: 42px;
+  min-height: 42px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lb-tool-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.lb-tool-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.lb-tool-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.lb-tool-text {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* Image Viewport */
+.lb-viewport {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  min-height: 0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.lb-viewport img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Video Viewport */
+.lb-video-viewport {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  min-height: 0;
+  background: #020617;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.lb-video-viewport video {
+  width: 100%;
+  max-width: 820px;
+  max-height: 100%;
+  border-radius: 8px;
+  background: #000000;
+  outline: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+/* Table Viewport */
+.lb-table-viewport {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  min-height: 0;
+  background: #ffffff;
+  padding: 20px;
+  overflow: auto !important;
+  display: block !important;
+}
+
+.lb-footer {
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 10px 18px;
+  font-size: 0.85rem;
+  color: #334155;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.lb-caption {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
 .table-window-card {
   width: 900px;
   height: 600px;
@@ -912,17 +1177,17 @@ table.coursology-medical-table td {
 }
 
 /* Window Body Viewports */
-.window-body {
+.window-body,
+.image-viewport {
   flex: 1;
+  min-height: 0;
   position: relative;
+  z-index: 5;
   overflow: hidden;
   background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.image-viewport {
   cursor: grab;
   user-select: none;
 }
