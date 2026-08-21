@@ -1492,6 +1492,7 @@ function setupPanAndZoom() {
     vp.addEventListener('mousedown', (e) => {
       if (e.target.closest('button') || e.target.closest('a')) return;
       isPanning = true;
+      document.body.classList.add('dragging-active');
       startPanX = e.clientX - imgPanX;
       startPanY = e.clientY - imgPanY;
     });
@@ -1505,7 +1506,13 @@ function setupPanAndZoom() {
   });
 
   window.addEventListener('mouseup', () => {
-    isPanning = false;
+    if (isPanning) {
+      isPanning = false;
+      document.body.classList.remove('dragging-active');
+      if (window.getSelection) {
+        window.getSelection().removeAllRanges();
+      }
+    }
   });
 }
 
@@ -1553,6 +1560,7 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
       if (e.target.closest('.win-btn') || e.target.closest('.lb-close-btn') || e.target.closest('.lb-nav-btn')) return;
       if (cardEl.classList.contains('maximized')) return;
       isDragging = true;
+      document.body.classList.add('dragging-active');
       headerEl.style.cursor = 'grabbing';
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -1572,7 +1580,13 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
     };
 
     const onDragEnd = () => {
-      isDragging = false;
+      if (isDragging) {
+        isDragging = false;
+        document.body.classList.remove('dragging-active');
+        if (window.getSelection) {
+          window.getSelection().removeAllRanges();
+        }
+      }
       headerEl.style.cursor = 'grab';
     };
 
