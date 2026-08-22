@@ -285,6 +285,69 @@ body.dragging-active * {
   transform: rotate(-90deg);
 }
 
+/* Sidebar Collapsible Folder Groups */
+.sidebar-folder-card {
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.sidebar-folder-header {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: #f1f5f9;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #0f172a;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-folder-header:hover {
+  background: #e2e8f0;
+  color: #2563eb;
+}
+
+.sidebar-folder-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-chevron {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-folder-card.collapsed .folder-chevron {
+  transform: rotate(-90deg);
+}
+
+.sidebar-folder-card.collapsed .folder-article-list {
+  display: none;
+}
+
+.folder-article-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.folder-article-list .article-row-item {
+  padding-left: 24px;
+}
+
 .article-title-text {
   overflow: hidden;
   text-overflow: ellipsis;

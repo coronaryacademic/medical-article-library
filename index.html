@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="styles.css">
   <!-- Marked.js Markdown Parser -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- JSZip Library for Folder Package Export & Import -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
   <div class="app-layout">
@@ -28,6 +30,10 @@
           Import .md
           <input type="file" id="file-input" accept=".md,.txt" multiple hidden>
         </label>
+        <label class="btn secondary-btn file-label" style="margin-top: 6px; width: 100%;">
+          📁 Import Folder (.zip)
+          <input type="file" id="import-zip-input" accept=".zip" hidden>
+        </label>
       </div>
 
       <div class="script-action" style="margin-bottom: 12px;">
@@ -45,6 +51,7 @@
       <div class="sidebar-footer">
         <button id="clear-all-btn" class="btn text-btn">Clear All</button>
         <button id="export-all-btn" class="btn text-btn">Export JSON</button>
+        <button id="export-folder-btn" class="btn text-btn" style="color: #2563eb; font-weight: 600;">📁 Export Folder (.zip)</button>
         <label class="btn text-btn file-label" style="cursor: pointer;">
           Import JSON
           <input type="file" id="import-json-input" accept=".json,.gz,.json.gz" hidden>
@@ -207,6 +214,17 @@
 
       <button id="copy-script-code-btn" class="btn primary-btn" style="width: 100%; padding: 12px; font-size: 1rem; margin-bottom: 14px; background: #2563eb; border-color: #1d4ed8; color: #ffffff;">Copy Tampermonkey Script Code</button>
       <textarea id="script-code-textarea" style="width: 100%; height: 220px; font-family: monospace; font-size: 0.75rem; padding: 10px; border: 2px solid #000000; border-radius: 4px; resize: vertical;" readonly></textarea>
+    </div>
+  </div>
+
+  <!-- Export Folder Package Progress Modal -->
+  <div id="export-progress-modal" class="lightbox hidden" style="background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999;">
+    <div style="background: #ffffff; color: #0f172a; padding: 24px 28px; border-radius: 10px; max-width: 440px; width: 90%; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); border: 1px solid #e2e8f0;">
+      <h3 style="margin-bottom: 10px; font-size: 1.15rem; color: #2563eb;">Exporting Folder Package...</h3>
+      <p id="export-progress-text" style="font-size: 0.9rem; color: #64748b; margin-bottom: 16px;">Downloading article media assets to local storage...</p>
+      <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+        <div id="export-progress-bar" style="width: 0%; height: 100%; background: #2563eb; transition: width 0.2s ease;"></div>
+      </div>
     </div>
   </div>
 

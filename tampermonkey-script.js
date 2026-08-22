@@ -20,7 +20,35 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 'v41.0 (Video Buttons & Paragraph Fix)';
+    const SCRIPT_VERSION = 'v42.0 (Base64 Offline Media Capture)';
+
+    // Helper to fetch any CDN image as Base64 Data URI via GM_xmlhttpRequest
+    function fetchImageAsBase64(url) {
+        return new Promise((resolve) => {
+            if (!url || url.startsWith('data:')) return resolve(url);
+            if (typeof GM_xmlhttpRequest !== 'function') return resolve(url);
+
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: url,
+                responseType: 'blob',
+                onload: function(resp) {
+                    if (resp.status === 200 && resp.response) {
+                        const reader = new FileReader();
+                        reader.onloadend = function() {
+                            resolve(reader.result || url);
+                        };
+                        reader.readAsDataURL(resp.response);
+                    } else {
+                        resolve(url);
+                    }
+                },
+                onerror: function() {
+                    resolve(url);
+                }
+            });
+        });
+    }
 
     // ─── Library Loader Helper ──────────────────────────────────────────────
     async function ensureLibrariesLoaded() {
@@ -468,6 +496,7 @@
             if (src && !src.startsWith('data:')) {
                 const absUrl = new URL(src, window.location.href).href;
                 img.src = absUrl;
+                img.setAttribute('data-cdn-src', absUrl);
                 img.removeAttribute('srcset');
                 img.removeAttribute('data-src');
             }

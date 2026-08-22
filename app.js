@@ -75,11 +75,14 @@ async function dbClear() {
 let articles = [];
 let activeArticleId = null;
 
-// Lightbox / Gallery State & Zoom Tools
-let currentFigureList = []; // Array of { src, caption, element, alt, index }
-let currentFigureIndex = 0;
 let currentArticleToc = []; // [{ id, text, level }]
 let activeTocCollapsed = false; // Tracks if active article TOC is collapsed in sidebar
+let currentFigureList = []; // Array of { src, caption, element, alt, index }
+let currentFigureIndex = 0;
+
+// Local Media Blob Store & Folder Collapse State
+const localBlobStore = new Map();
+const folderCollapseState = new Set();
 
 // Pan & Zoom State
 let imgZoom = 1.0;
@@ -351,11 +354,16 @@ function setupEventListeners() {
   if (pasteBtn) pasteBtn.addEventListener('click', handleClipboardPaste);
   if (welcomePasteBtn) welcomePasteBtn.addEventListener('click', handleClipboardPaste);
 
+  const exportFolderBtn = document.getElementById('export-folder-btn');
+  const importZipInput = document.getElementById('import-zip-input');
+
   if (fileInput) fileInput.addEventListener('change', handleFileInput);
   if (importJsonInput) importJsonInput.addEventListener('change', handleJsonImport);
+  if (importZipInput) importZipInput.addEventListener('change', handleImportZipPackage);
   if (searchInput) searchInput.addEventListener('input', renderSidebar);
   if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
   if (exportAllBtn) exportAllBtn.addEventListener('click', handleExportBackup);
+  if (exportFolderBtn) exportFolderBtn.addEventListener('click', handleExportFolderPackage);
 
   if (articleCollapseAllBtn) articleCollapseAllBtn.addEventListener('click', collapseAllArticleSections);
   if (articleExpandAllBtn) articleExpandAllBtn.addEventListener('click', expandAllArticleSections);
@@ -707,6 +715,127 @@ async function addArticle(articleData, autoSave = true) {
 }
 
 // Render Clean Flat Article List & Expandable/Collapsible Active Article TOC
+function createArticleListItem(article) {
+  const li = document.createElement('li');
+  const isActive = article.id === activeArticleId;
+  if (isActive) {
+    li.className = 'active' + (activeTocCollapsed ? ' toc-collapsed' : '');
+  }
+
+  const rowDiv = document.createElement('div');
+  rowDiv.className = 'article-row-item';
+
+  const titleWrapper = document.createElement('div');
+  titleWrapper.className = 'article-title-wrapper';
+
+  const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+  if (isActive) {
+    titleWrapper.innerHTML = `${chevronSvg}<span class="article-title-text">${article.title}</span>`;
+  } else {
+    titleWrapper.innerHTML = `<span class="article-title-text">${article.title}</span>`;
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'delete-item';
+  deleteBtn.innerHTML = '&times;';
+  deleteBtn.title = 'Delete article';
+  deleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    deleteArticle(article.id);
+  };
+
+  rowDiv.appendChild(titleWrapper);
+  rowDiv.appendChild(deleteBtn);
+  li.appendChild(rowDiv);
+
+  if (isActive && currentArticleToc && currentArticleToc.length > 0) {
+    const tocDiv = document.createElement('div');
+    tocDiv.className = 'sidebar-toc' + (activeTocCollapsed ? ' collapsed' : '');
+
+    currentArticleToc.forEach(item => {
+      const h1Link = document.createElement('a');
+      h1Link.className = 'toc-item level-main';
+      h1Link.dataset.sectionId = item.id;
+      h1Link.innerText = item.text;
+
+      const subGroup = document.createElement('div');
+      subGroup.className = 'sidebar-subgroup';
+      subGroup.dataset.subgroupFor = item.id;
+
+      if (item.children && item.children.length > 0) {
+        item.children.forEach(sub => {
+          const subLink = document.createElement('a');
+          subLink.className = 'toc-item level-sub';
+          subLink.dataset.sectionId = sub.id;
+          subLink.innerHTML = `<span class="toc-bullet">•</span> <span>${sub.text}</span>`;
+
+          subLink.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const secEl = document.getElementById(sub.id);
+            if (secEl) {
+              const parentH1 = document.getElementById(item.id);
+              if (parentH1) {
+                parentH1.classList.remove('collapsed');
+                const h1Body = parentH1.nextElementSibling;
+                if (h1Body && h1Body.classList.contains('h1-section-body')) {
+                  h1Body.classList.remove('collapsed');
+                }
+              }
+              secEl.classList.remove('collapsed');
+              const subBody = secEl.nextElementSibling;
+              if (subBody && subBody.classList.contains('h2-section-body')) {
+                subBody.classList.remove('collapsed');
+              }
+              secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              document.querySelectorAll('.toc-item').forEach(el => el.classList.remove('active'));
+              subLink.classList.add('active');
+            }
+          };
+          subGroup.appendChild(subLink);
+        });
+      }
+
+      h1Link.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const secEl = document.getElementById(item.id);
+        if (secEl) {
+          secEl.classList.remove('collapsed');
+          const h1Body = secEl.nextElementSibling;
+          if (h1Body && h1Body.classList.contains('h1-section-body')) {
+            h1Body.classList.remove('collapsed');
+          }
+          subGroup.classList.remove('collapsed');
+          secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          document.querySelectorAll('.toc-item').forEach(el => el.classList.remove('active'));
+          h1Link.classList.add('active');
+        }
+      };
+
+      tocDiv.appendChild(h1Link);
+      if (item.children && item.children.length > 0) {
+        tocDiv.appendChild(subGroup);
+      }
+    });
+
+    li.appendChild(tocDiv);
+  }
+
+  rowDiv.onclick = () => {
+    if (isActive) {
+      activeTocCollapsed = !activeTocCollapsed;
+      renderSidebar();
+    } else {
+      activeTocCollapsed = false;
+      displayArticle(article.id);
+    }
+  };
+
+  return li;
+}
+
+// Render Clean Flat Article List & Expandable/Collapsible Active Article TOC
 function renderSidebar() {
   const query = searchInput.value.toLowerCase().trim();
   articleFlatList.innerHTML = '';
@@ -730,127 +859,63 @@ function renderSidebar() {
     return;
   }
 
-  const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+  const folderGroups = {};
+  const topLevelArticles = [];
 
-  filtered.forEach(article => {
-    const li = document.createElement('li');
-    const isActive = article.id === activeArticleId;
-    if (isActive) {
-      li.className = 'active' + (activeTocCollapsed ? ' toc-collapsed' : '');
-    }
-
-    const rowDiv = document.createElement('div');
-    rowDiv.className = 'article-row-item';
-
-    const titleWrapper = document.createElement('div');
-    titleWrapper.className = 'article-title-wrapper';
-
-    if (isActive) {
-      titleWrapper.innerHTML = `${chevronSvg}<span class="article-title-text">${article.title}</span>`;
+  filtered.forEach(art => {
+    if (art.folderName) {
+      if (!folderGroups[art.folderName]) folderGroups[art.folderName] = [];
+      folderGroups[art.folderName].push(art);
     } else {
-      titleWrapper.innerHTML = `<span class="article-title-text">${article.title}</span>`;
+      topLevelArticles.push(art);
     }
+  });
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-item';
-    deleteBtn.innerHTML = '&times;';
-    deleteBtn.title = 'Delete article';
-    deleteBtn.onclick = (e) => {
-      e.stopPropagation();
-      deleteArticle(article.id);
-    };
+  const folderChevronSvg = `<svg class="folder-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
 
-    rowDiv.appendChild(titleWrapper);
-    rowDiv.appendChild(deleteBtn);
-    li.appendChild(rowDiv);
+  // Render Folders
+  Object.keys(folderGroups).forEach(folderName => {
+    const groupArticles = folderGroups[folderName];
+    const isCollapsed = folderCollapseState.has(folderName);
 
-    // Render Expandable/Collapsible Table of Contents under ACTIVE article
-    if (isActive && currentArticleToc && currentArticleToc.length > 0) {
-      const tocDiv = document.createElement('div');
-      tocDiv.className = 'sidebar-toc' + (activeTocCollapsed ? ' collapsed' : '');
+    const folderCard = document.createElement('div');
+    folderCard.className = 'sidebar-folder-card' + (isCollapsed ? ' collapsed' : '');
 
-      currentArticleToc.forEach(item => {
-        const h1Link = document.createElement('a');
-        h1Link.className = 'toc-item level-main';
-        h1Link.dataset.sectionId = item.id;
-        h1Link.innerText = item.text;
+    const folderHeader = document.createElement('div');
+    folderHeader.className = 'sidebar-folder-header';
+    folderHeader.innerHTML = `
+      <div class="sidebar-folder-title">
+        <span>📁</span>
+        <span>${folderName}</span>
+        <span style="font-size:0.78rem; font-weight:normal; opacity:0.75;">(${groupArticles.length})</span>
+      </div>
+      ${folderChevronSvg}
+    `;
 
-        const subGroup = document.createElement('div');
-        subGroup.className = 'sidebar-subgroup';
-        subGroup.dataset.subgroupFor = item.id;
-
-        if (item.children && item.children.length > 0) {
-          item.children.forEach(sub => {
-            const subLink = document.createElement('a');
-            subLink.className = 'toc-item level-sub';
-            subLink.dataset.sectionId = sub.id;
-            subLink.innerHTML = `<span class="toc-bullet">•</span> <span>${sub.text}</span>`;
-
-            subLink.onclick = (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              const secEl = document.getElementById(sub.id);
-              if (secEl) {
-                // Ensure parent H1 main section is uncollapsed
-                const parentH1 = document.getElementById(item.id);
-                if (parentH1) {
-                  parentH1.classList.remove('collapsed');
-                  const h1Body = parentH1.nextElementSibling;
-                  if (h1Body && h1Body.classList.contains('h1-section-body')) {
-                    h1Body.classList.remove('collapsed');
-                  }
-                }
-                secEl.classList.remove('collapsed');
-                const subBody = secEl.nextElementSibling;
-                if (subBody && subBody.classList.contains('h2-section-body')) {
-                  subBody.classList.remove('collapsed');
-                }
-                secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                document.querySelectorAll('.toc-item').forEach(el => el.classList.remove('active'));
-                subLink.classList.add('active');
-              }
-            };
-            subGroup.appendChild(subLink);
-          });
-        }
-
-        h1Link.onclick = (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          const secEl = document.getElementById(item.id);
-          if (secEl) {
-            secEl.classList.remove('collapsed');
-            const h1Body = secEl.nextElementSibling;
-            if (h1Body && h1Body.classList.contains('h1-section-body')) {
-              h1Body.classList.remove('collapsed');
-            }
-            subGroup.classList.remove('collapsed');
-            secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            document.querySelectorAll('.toc-item').forEach(el => el.classList.remove('active'));
-            h1Link.classList.add('active');
-          }
-        };
-
-        tocDiv.appendChild(h1Link);
-        if (item.children && item.children.length > 0) {
-          tocDiv.appendChild(subGroup);
-        }
-      });
-
-      li.appendChild(tocDiv);
-    }
-
-    rowDiv.onclick = () => {
-      if (isActive) {
-        activeTocCollapsed = !activeTocCollapsed;
-        renderSidebar();
+    folderHeader.onclick = () => {
+      if (folderCollapseState.has(folderName)) {
+        folderCollapseState.delete(folderName);
       } else {
-        activeTocCollapsed = false;
-        displayArticle(article.id);
+        folderCollapseState.add(folderName);
       }
+      renderSidebar();
     };
 
-    articleFlatList.appendChild(li);
+    const folderUl = document.createElement('ul');
+    folderUl.className = 'folder-article-list';
+
+    groupArticles.forEach(art => {
+      folderUl.appendChild(createArticleListItem(art));
+    });
+
+    folderCard.appendChild(folderHeader);
+    folderCard.appendChild(folderUl);
+    articleFlatList.appendChild(folderCard);
+  });
+
+  // Render Top Level Articles
+  topLevelArticles.forEach(art => {
+    articleFlatList.appendChild(createArticleListItem(art));
   });
 }
 
@@ -939,6 +1004,26 @@ function displayArticle(id) {
   } else {
     articleBody.innerText = cleanMd;
   }
+
+  // Resolve localBlobStore URLs and attach automatic CDN fallback handler
+  articleBody.querySelectorAll('img, video').forEach(el => {
+    const src = el.getAttribute('src');
+    if (src) {
+      const baseName = src.replace(/^media\//, '');
+      if (localBlobStore.has(src)) {
+        el.src = localBlobStore.get(src);
+      } else if (localBlobStore.has(baseName)) {
+        el.src = localBlobStore.get(baseName);
+      }
+    }
+    el.onerror = function() {
+      const cdnBackup = this.getAttribute('data-cdn-src');
+      if (cdnBackup && this.src !== cdnBackup) {
+        console.warn('Local hard-drive asset missing/deleted. Falling back to CDN link:', cdnBackup);
+        this.src = cdnBackup;
+      }
+    };
+  });
 
   // Ensure Opening Paragraphs have an "Introduction" Heading if no heading exists at top
   ensureIntroductionHeading(articleBody);
@@ -1128,53 +1213,60 @@ function renderMediaSidebar(container) {
   const videosList = currentFigureList.filter(i => i.isVideo);
   const tablesList = currentFigureList.filter(i => i.isTable);
 
-  // Render Figures Section
-  figuresList.forEach((fig) => {
-    const labelText = (fig.alt || `figure ${fig.figNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'media-thumb-btn';
-    btn.innerHTML = `
-      <div class="media-thumb-box">
-        <img src="${fig.src}" alt="${labelText}" loading="lazy" class="media-thumb-img">
-      </div>
-      <p class="media-thumb-label">${labelText}</p>
-    `;
-    btn.onclick = () => openLightbox(fig.index);
-    mediaFiguresGrid.appendChild(btn);
-  });
+  // Render Figures & Videos Section
+  if (figuresList.length === 0 && videosList.length === 0) {
+    mediaFiguresGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No figures</div>`;
+  } else {
+    figuresList.forEach((fig) => {
+      const labelText = (fig.alt || `figure ${fig.figNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'media-thumb-btn';
+      btn.innerHTML = `
+        <div class="media-thumb-box">
+          <img src="${fig.src}" alt="${labelText}" loading="lazy" class="media-thumb-img">
+        </div>
+        <p class="media-thumb-label">${labelText}</p>
+      `;
+      btn.onclick = () => openLightbox(fig.index);
+      mediaFiguresGrid.appendChild(btn);
+    });
 
-  // Render Videos Section (in figures grid)
-  videosList.forEach((vid) => {
-    const labelText = (vid.alt || `video ${vid.videoNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'media-thumb-btn';
-    btn.innerHTML = `
-      <div class="media-thumb-box" style="background:#eff6ff;display:flex;align-items:center;justify-content:center;">
-        ${videoPlayIcon}
-      </div>
-      <p class="media-thumb-label">${labelText}</p>
-    `;
-    btn.onclick = () => openLightbox(vid.index);
-    mediaFiguresGrid.appendChild(btn);
-  });
+    videosList.forEach((vid) => {
+      const labelText = (vid.alt || `video ${vid.videoNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'media-thumb-btn';
+      btn.innerHTML = `
+        <div class="media-thumb-box" style="background:#eff6ff;display:flex;align-items:center;justify-content:center;">
+          ${videoPlayIcon}
+        </div>
+        <p class="media-thumb-label">${labelText}</p>
+      `;
+      btn.onclick = () => openLightbox(vid.index);
+      mediaFiguresGrid.appendChild(btn);
+    });
+  }
 
   // Render Tables Section
-  tablesList.forEach((tbl) => {
-    const labelText = `table ${tbl.tableNum || 1}`;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'media-thumb-btn';
-    btn.innerHTML = `
-      <div class="media-thumb-box">
-        ${tableSvgIcon}
-      </div>
-      <p class="media-thumb-label">${labelText}</p>
-    `;
-    btn.onclick = () => openLightbox(tbl.index);
-    mediaTablesGrid.appendChild(btn);
-  });
+  if (tablesList.length === 0) {
+    mediaTablesGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No tables</div>`;
+  } else {
+    tablesList.forEach((tbl) => {
+      const labelText = `table ${tbl.tableNum || 1}`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'media-thumb-btn';
+      btn.innerHTML = `
+        <div class="media-thumb-box">
+          ${tableSvgIcon}
+        </div>
+        <p class="media-thumb-label">${labelText}</p>
+      `;
+      btn.onclick = () => openLightbox(tbl.index);
+      mediaTablesGrid.appendChild(btn);
+    });
+  }
 
   mediaSidebar.classList.remove('hidden');
   const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
@@ -1931,6 +2023,413 @@ async function handleJsonImport(e) {
   } catch (err) {
     alert('Error reading JSON backup file: ' + err.message);
   }
+}
+
+// Helper to fetch any media URL (CDN, Base64, or local blob) as a binary Blob with multi-stage CORS & Proxy fallbacks
+async function fetchMediaAsBlob(url) {
+  if (!url) return null;
+
+  // 1. Check localBlobStore first
+  if (typeof localBlobStore !== 'undefined') {
+    const cleanKey = url.replace(/^media\//, '');
+    if (localBlobStore.has(url) || localBlobStore.has(cleanKey)) {
+      const blobUrl = localBlobStore.get(url) || localBlobStore.get(cleanKey);
+      try {
+        const res = await fetch(blobUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          if (blob && blob.size > 0) return blob;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch from localBlobStore blob URL:', e);
+      }
+    }
+  }
+
+  // 2. Base64 Data URI
+  if (url.startsWith('data:')) {
+    try {
+      const res = await fetch(url);
+      return await res.blob();
+    } catch (e) {
+      console.warn('Failed to convert base64 data URI to blob:', e);
+    }
+  }
+
+  // 3. Direct Fetch with CORS mode
+  try {
+    const resp = await fetch(url, { mode: 'cors' });
+    if (resp.ok) {
+      const blob = await resp.blob();
+      if (blob && blob.size > 100) return blob;
+    }
+  } catch (e) {
+    console.warn('Direct CORS fetch failed for:', url, e);
+  }
+
+  // 4. Direct Fetch with standard mode
+  try {
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const blob = await resp.blob();
+      if (blob && blob.size > 100) return blob;
+    }
+  } catch (e) {
+    console.warn('Direct fetch failed for:', url, e);
+  }
+
+  // 5. wsrv.nl Image CDN Proxy (Specialized high-speed CDN image proxy)
+  try {
+    const proxyUrl = 'https://wsrv.nl/?url=' + encodeURIComponent(url);
+    const resp = await fetch(proxyUrl);
+    if (resp.ok) {
+      const blob = await resp.blob();
+      if (blob && blob.size > 100) return blob;
+    }
+  } catch (e) {
+    console.warn('wsrv.nl proxy failed for:', url, e);
+  }
+
+  // 6. Google Focus Image Proxy
+  try {
+    const proxyUrl2 = 'https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=31536000&url=' + encodeURIComponent(url);
+    const resp = await fetch(proxyUrl2);
+    if (resp.ok) {
+      const blob = await resp.blob();
+      if (blob && blob.size > 100) return blob;
+    }
+  } catch (e) {
+    console.warn('Google Focus proxy failed for:', url, e);
+  }
+
+  // 7. CodeTabs CORS Proxy
+  try {
+    const proxyUrl3 = 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+    const resp = await fetch(proxyUrl3);
+    if (resp.ok) {
+      const blob = await resp.blob();
+      if (blob && blob.size > 100) return blob;
+    }
+  } catch (e) {
+    console.warn('CodeTabs CORS proxy failed for:', url, e);
+  }
+
+  // 8. AllOrigins CORS Proxy
+  try {
+    const proxyUrl4 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    const resp = await fetch(proxyUrl4);
+    if (resp.ok) {
+      const blob = await resp.blob();
+      if (blob && blob.size > 100) return blob;
+    }
+  } catch (e) {
+    console.warn('AllOrigins CORS proxy failed for:', url, e);
+  }
+
+  // 7. Image Canvas Fallback
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    const timeout = setTimeout(() => resolve(null), 6000);
+
+    img.onload = () => {
+      clearTimeout(timeout);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width || 800;
+        canvas.height = img.naturalHeight || img.height || 600;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => resolve(blob), 'image/png');
+      } catch (err) {
+        console.warn('Canvas export failed:', err);
+        resolve(null);
+      }
+    };
+
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve(null);
+    };
+
+    img.src = url;
+  });
+}
+
+function getMediaExtension(url, blob) {
+  if (blob && blob.type) {
+    if (blob.type.includes('png')) return 'png';
+    if (blob.type.includes('jpeg')) return 'jpg';
+    if (blob.type.includes('webp')) return 'webp';
+    if (blob.type.includes('gif')) return 'gif';
+    if (blob.type.includes('svg')) return 'svg';
+    if (blob.type.includes('mp4')) return 'mp4';
+    if (blob.type.includes('webm')) return 'webm';
+  }
+  if (url.startsWith('data:image/png')) return 'png';
+  if (url.startsWith('data:image/jpeg')) return 'jpg';
+  if (url.startsWith('data:image/webp')) return 'webp';
+  if (url.startsWith('data:image/gif')) return 'gif';
+  if (url.startsWith('data:image/svg')) return 'svg';
+  if (url.startsWith('data:video/mp4')) return 'mp4';
+
+  const extMatch = url.match(/\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov)(\?.*)?$/i);
+  if (extMatch) return extMatch[1].toLowerCase();
+
+  return 'png';
+}
+
+// Export Folder Package (.zip) with Downloaded Hard-Drive Media & CDN Fallback Preservation
+async function handleExportFolderPackage() {
+  if (articles.length === 0) {
+    alert('No articles available to export.');
+    return;
+  }
+
+  const defaultName = articles[0]?.folderName || 'Medical Articles Pack';
+  const folderName = prompt('Enter a name for your export folder package:', defaultName);
+  if (!folderName || !folderName.trim()) return;
+
+  const sanitizedFolderName = folderName.trim().replace(/[/\\?%*:|"<>]/g, '_');
+  const progressModal = document.getElementById('export-progress-modal');
+  const progressText = document.getElementById('export-progress-text');
+  const progressBar = document.getElementById('export-progress-bar');
+
+  if (progressModal) progressModal.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '5%';
+  if (progressText) progressText.innerText = 'Initializing package exporter...';
+
+  try {
+    const zip = typeof JSZip !== 'undefined' ? new JSZip() : null;
+    if (!zip) {
+      alert('JSZip library failed to load. Please check script inclusion.');
+      if (progressModal) progressModal.classList.add('hidden');
+      return;
+    }
+
+    const mediaFolder = zip.folder('media');
+    const mediaUrlMap = new Map(); // cdnUrl -> relative path
+    let mediaCounter = 0;
+
+    // Scan all articles for CDN media URLs, base64 images, and video assets
+    const mediaUrlsToFetch = new Set();
+    articles.forEach(art => {
+      const content = (art.markdown || '') + ' ' + (art.html || '');
+
+      // 1. img src
+      const imgMatches = content.matchAll(/<img[^>]+src=["']?([^"'\s>]+)["']?/gi);
+      for (const m of imgMatches) {
+        if (m[1] && !m[1].startsWith('media/')) mediaUrlsToFetch.add(m[1]);
+      }
+
+      // 2. markdown images ![alt](url)
+      const mdImgMatches = content.matchAll(/!\[[^\]]*\]\(([^)]+)\)/gi);
+      for (const m of mdImgMatches) {
+        if (m[1]) {
+          const cleanUrl = m[1].split(/\s+/)[0].trim();
+          if (cleanUrl && !cleanUrl.startsWith('media/')) mediaUrlsToFetch.add(cleanUrl);
+        }
+      }
+
+      // 3. video / source src
+      const vidMatches = content.matchAll(/<(?:video|source)[^>]+src=["']?([^"'\s>]+)["']?/gi);
+      for (const m of vidMatches) {
+        if (m[1] && !m[1].startsWith('media/')) mediaUrlsToFetch.add(m[1]);
+      }
+
+      // 4. data-cdn-src attribute
+      const cdnMatches = content.matchAll(/data-cdn-src=["']?([^"'\s>]+)["']?/gi);
+      for (const m of cdnMatches) {
+        if (m[1] && !m[1].startsWith('media/')) mediaUrlsToFetch.add(m[1]);
+      }
+    });
+
+    const totalMedia = mediaUrlsToFetch.size;
+    let fetchedCount = 0;
+
+    // Asynchronously fetch CDN & base64 media assets into binary Blobs
+    for (const mediaUrl of mediaUrlsToFetch) {
+      fetchedCount++;
+      const percent = Math.min(85, Math.round((fetchedCount / (totalMedia || 1)) * 80));
+      if (progressBar) progressBar.style.width = `${percent}%`;
+      if (progressText) progressText.innerText = `Downloading hard-drive media ${fetchedCount} of ${totalMedia}...`;
+
+      try {
+        const blob = await fetchMediaAsBlob(mediaUrl);
+        if (blob) {
+          const ext = getMediaExtension(mediaUrl, blob);
+          mediaCounter++;
+          const filenameInZip = `asset_${mediaCounter}.${ext}`;
+          const relativeName = `media/${filenameInZip}`;
+
+          mediaFolder.file(filenameInZip, blob);
+          mediaUrlMap.set(mediaUrl, relativeName);
+        } else {
+          console.warn('Could not fetch blob for media asset:', mediaUrl);
+        }
+      } catch (err) {
+        console.warn(`Failed to download media asset (${mediaUrl}):`, err);
+      }
+    }
+
+    if (progressBar) progressBar.style.width = '90%';
+    if (progressText) progressText.innerText = 'Rewriting article paths & packing zip...';
+
+    // Rewrite article contents with local relative media paths + backup CDN URLs
+    const exportedArticles = [];
+    articles.forEach((art, idx) => {
+      let updatedMd = art.markdown || '';
+
+      mediaUrlMap.forEach((relPath, originalUrl) => {
+        const cdnBackup = originalUrl.startsWith('data:') ? '' : ` data-cdn-src="${originalUrl}"`;
+
+        // Replace markdown ![alt](originalUrl)
+        const mdEscaped = originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const mdRegex = new RegExp(`!\\[([^\\]]*)\\]\\(${mdEscaped}(?:\\s+["'][^"']*["'])?\\)`, 'g');
+        updatedMd = updatedMd.replace(mdRegex, (match, altText) => {
+          return `<img src="${relPath}"${cdnBackup} alt="${altText}" />`;
+        });
+
+        // Replace direct originalUrl occurrences inside markdown/HTML
+        if (updatedMd.includes(originalUrl)) {
+          updatedMd = updatedMd.split(originalUrl).join(relPath);
+        }
+      });
+
+      const artCopy = {
+        ...art,
+        folderName: sanitizedFolderName,
+        markdown: updatedMd
+      };
+      exportedArticles.push(artCopy);
+
+      const filename = art.title ? art.title.replace(/[/\\?%*:|"<>]/g, '_') + '.md' : `article_${idx + 1}.md`;
+      zip.file(filename, updatedMd);
+    });
+
+    const manifest = {
+      folderName: sanitizedFolderName,
+      exportedAt: new Date().toISOString(),
+      articles: exportedArticles
+    };
+    zip.file('folder-manifest.json', JSON.stringify(manifest, null, 2));
+
+    if (progressBar) progressBar.style.width = '95%';
+    if (progressText) progressText.innerText = 'Generating package archive...';
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+    if (progressBar) progressBar.style.width = '100%';
+
+    // Save File Picker prompt allows user to save anywhere on hard drive
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `${sanitizedFolderName}.zip`,
+          types: [{
+            description: 'Folder Package Zip Archive',
+            accept: { 'application/zip': ['.zip'] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(zipBlob);
+        await writable.close();
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          downloadBlob(zipBlob, `${sanitizedFolderName}.zip`);
+        }
+      }
+    } else {
+      downloadBlob(zipBlob, `${sanitizedFolderName}.zip`);
+    }
+
+  } catch (err) {
+    console.error('Export Folder Package error:', err);
+    alert('Failed to export folder package: ' + err.message);
+  } finally {
+    if (progressModal) progressModal.classList.add('hidden');
+  }
+}
+
+// Import Folder Package (.zip)
+async function handleImportZipPackage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (typeof JSZip === 'undefined') {
+    alert('JSZip library is missing.');
+    return;
+  }
+
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const zipFolderName = file.name.replace(/\.zip$/i, '');
+
+    // Extract media files into localBlobStore
+    const mediaFiles = zip.filter((relPath, fileObj) => relPath.startsWith('media/') && !fileObj.dir);
+    for (const mFile of mediaFiles) {
+      const blob = await mFile.async('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      localBlobStore.set(mFile.name, blobUrl);
+      const baseName = mFile.name.replace(/^media\//, '');
+      localBlobStore.set(baseName, blobUrl);
+    }
+
+    let newArticles = [];
+    const manifestFile = zip.file('folder-manifest.json');
+    if (manifestFile) {
+      const manifestText = await manifestFile.async('string');
+      const manifest = JSON.parse(manifestText);
+      const groupName = manifest.folderName || zipFolderName;
+      newArticles = (manifest.articles || []).map(art => ({
+        ...art,
+        id: art.id || (Date.now() + Math.random().toString(36).substring(2, 6)),
+        folderName: groupName
+      }));
+    } else {
+      const mdFiles = zip.filter((relPath, fileObj) => relPath.endsWith('.md') && !fileObj.dir);
+      for (let i = 0; i < mdFiles.length; i++) {
+        const mdText = await mdFiles[i].async('string');
+        const titleMatch = mdText.match(/^#\s+(.+)$/m);
+        const title = titleMatch ? titleMatch[1].trim() : mdFiles[i].name.replace(/\.md$/i, '');
+        newArticles.push({
+          id: 'art-' + Date.now() + '-' + i,
+          title: title,
+          extractedAt: new Date().toLocaleDateString(),
+          markdown: mdText,
+          folderName: zipFolderName
+        });
+      }
+    }
+
+    if (newArticles.length > 0) {
+      for (const art of newArticles) {
+        await addArticle(art, false);
+      }
+      await saveArticles();
+      renderSidebar();
+      displayArticle(newArticles[0].id);
+      alert(`Successfully imported folder package "${zipFolderName}" containing ${newArticles.length} article(s)!`);
+    } else {
+      alert('No valid articles found inside zip package.');
+    }
+  } catch (err) {
+    console.error('Import ZIP package error:', err);
+    alert('Failed to import zip package: ' + err.message);
+  } finally {
+    e.target.value = '';
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 // Initialize
