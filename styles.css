@@ -287,20 +287,22 @@ body.dragging-active * {
 
 /* Sidebar Collapsible Folder Groups */
 .sidebar-folder-card {
-  margin-bottom: 8px;
-  border-radius: 6px;
+.sidebar-folder-card {
+  margin-bottom: 14px;
+  border-radius: 8px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
 .sidebar-folder-header {
-  padding: 10px 14px;
+  padding: 11px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  background: #f1f5f9;
+  background: #f8fafc;
   font-weight: 700;
   font-size: 0.92rem;
   color: #0f172a;
@@ -309,14 +311,14 @@ body.dragging-active * {
 }
 
 .sidebar-folder-header:hover {
-  background: #e2e8f0;
+  background: #f1f5f9;
   color: #2563eb;
 }
 
 .sidebar-folder-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -339,13 +341,21 @@ body.dragging-active * {
 
 .folder-article-list {
   list-style: none;
-  padding: 0;
+  padding: 6px 0;
   margin: 0;
-  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+
+.folder-article-list li {
+  margin: 3px 8px 3px 14px;
+  border-radius: 6px;
 }
 
 .folder-article-list .article-row-item {
-  padding-left: 24px;
+  padding: 7px 10px 7px 14px;
+  font-size: 0.83rem;
+  font-weight: 500;
 }
 
 .article-title-text {
@@ -1374,3 +1384,89 @@ table.coursology-medical-table td {
 }
 
 .hidden { display: none !important; }
+
+/* Drag and Drop UI */
+.sidebar-folder-card.drag-over {
+  background: #eff6ff !important;
+  outline: 2px dashed #2563eb;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.article-row-item[draggable="true"] {
+  cursor: grab;
+}
+
+.sidebar-folder-ul li.dragging {
+  opacity: 0.4;
+  background: #dbeafe !important;
+}
+
+/* Custom App Context Menu */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  width: 200px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 6px 0;
+  font-size: 0.85rem;
+  color: #1e293b;
+  animation: contextMenuPop 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes contextMenuPop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  color: #334155;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.context-menu-item:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.context-menu-item.danger:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 4px 0;
+}
+
+.context-menu-submenu {
+  position: relative;
+}
+
+.context-submenu-list {
+  display: none;
+  position: absolute;
+  top: -4px;
+  left: 100%;
+  width: 170px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+  padding: 6px 0;
+}
+
+.context-menu-submenu:hover .context-submenu-list {
+  display: block;
+}

@@ -158,6 +158,262 @@ const lightboxCounter = document.getElementById('lightbox-counter');
 const lightboxPrev = document.getElementById('lightbox-prev');
 const lightboxNext = document.getElementById('lightbox-next');
 
+// Global Folder State
+let folders = ['Uncategorized'];
+let activeFolderName = 'Uncategorized';
+let API_BASE_URL = '';
+
+async function handleCreateFolder() {
+  const folderName = prompt('Enter new folder name:');
+  if (!folderName || !folderName.trim()) return;
+  const cleanName = folderName.trim();
+  if (!folders.includes(cleanName)) {
+    folders.push(cleanName);
+    activeFolderName = cleanName;
+    if (API_BASE_URL) {
+      try {
+        await fetch(`${API_BASE_URL}/api/create-folder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderName: cleanName })
+        });
+      } catch (e) {}
+    }
+    renderSidebar();
+  } else {
+    activeFolderName = cleanName;
+    renderSidebar();
+  }
+}
+
+async function handleRenameFolder(oldName) {
+  if (oldName === 'Uncategorized') {
+    alert('The Uncategorized folder cannot be renamed.');
+    return;
+  }
+  const newName = prompt(`Rename folder "${oldName}" to:`, oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+  const cleanNew = newName.trim();
+
+  const idx = folders.indexOf(oldName);
+  if (idx >= 0) folders[idx] = cleanNew;
+  if (activeFolderName === oldName) activeFolderName = cleanNew;
+
+  articles.forEach(a => {
+    if (a.folderName === oldName) a.folderName = cleanNew;
+  });
+
+  if (API_BASE_URL) {
+    try {
+      await fetch(`${API_BASE_URL}/api/rename-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName, newName: cleanNew })
+      });
+    } catch (e) {}
+  }
+
+  saveArticles();
+  renderSidebar();
+}
+
+async function handleDeleteFolder(folderName) {
+  if (folderName === 'Uncategorized') {
+    alert('The Uncategorized folder cannot be deleted.');
+    return;
+  }
+  const folderArticles = articles.filter(a => (a.folderName || 'Uncategorized') === folderName);
+  const count = folderArticles.length;
+
+  if (confirm(`Are you sure you want to delete folder "${folderName}" and all ${count} article(s) inside it?`)) {
+    // Delete articles from IndexedDB
+    for (const art of folderArticles) {
+      try { await dbDelete(art.id); } catch (e) {}
+    }
+
+    // Remove from articles memory array & folders array
+    articles = articles.filter(a => (a.folderName || 'Uncategorized') !== folderName);
+    folders = folders.filter(f => f !== folderName);
+    if (activeFolderName === folderName) activeFolderName = 'Uncategorized';
+
+    if (API_BASE_URL) {
+      try {
+        await fetch(`${API_BASE_URL}/api/delete-folder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderName })
+        });
+      } catch (e) {}
+    }
+
+    if (activeArticleId && !articles.some(a => a.id === activeArticleId)) {
+      activeArticleId = articles.length > 0 ? articles[0].id : null;
+    }
+
+    await syncLibraryToBackend();
+    renderSidebar();
+    if (activeArticleId) {
+      displayArticle(activeArticleId);
+    } else {
+      welcomeState.classList.remove('hidden');
+      articleContent.classList.add('hidden');
+    }
+  }
+}
+
+// Custom Context Menu Logic
+function hideContextMenu() {
+  const ctx = document.getElementById('app-context-menu');
+  if (ctx) ctx.classList.add('hidden');
+}
+
+function positionContextMenu(x, y) {
+  const ctx = document.getElementById('app-context-menu');
+  if (!ctx) return;
+  ctx.style.left = `${x}px`;
+  ctx.style.top = `${y}px`;
+  ctx.classList.remove('hidden');
+
+  const rect = ctx.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    ctx.style.left = `${window.innerWidth - rect.width - 10}px`;
+  }
+  if (rect.bottom > window.innerHeight) {
+    ctx.style.top = `${window.innerHeight - rect.height - 10}px`;
+  }
+}
+
+function showArticleContextMenu(x, y, article) {
+  const ctx = document.getElementById('app-context-menu');
+  if (!ctx) return;
+
+  const editSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+  const folderSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+  const copySvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`;
+  const trashSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+
+  const subItems = folders.map(f => `
+    <div class="context-menu-item move-to-f-item" data-folder="${f}">
+      ${folderSvg} <span>${f}</span> ${f === (article.folderName || 'Uncategorized') ? '<span style="color:#2563eb; font-weight:bold; margin-left:auto;">✓</span>' : ''}
+    </div>
+  `).join('');
+
+  ctx.innerHTML = `
+    <div class="context-menu-item ctx-rename-art">${editSvg} <span>Rename Article</span></div>
+    <div class="context-menu-submenu">
+      <div class="context-menu-item">${folderSvg} <span>Move to Folder ▸</span></div>
+      <div class="context-submenu-list">${subItems}</div>
+    </div>
+    <div class="context-menu-item ctx-dup-art">${copySvg} <span>Duplicate Article</span></div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item danger ctx-del-art">${trashSvg} <span>Delete Article</span></div>
+  `;
+
+  const renameBtn = ctx.querySelector('.ctx-rename-art');
+  if (renameBtn) {
+    renameBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      const newTitle = prompt('Rename article:', article.title);
+      if (newTitle && newTitle.trim()) {
+        article.title = newTitle.trim();
+        saveArticles(article);
+        renderSidebar();
+        if (activeArticleId === article.id) displayArticle(article.id);
+      }
+    };
+  }
+
+  const dupBtn = ctx.querySelector('.ctx-dup-art');
+  if (dupBtn) {
+    dupBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      const dup = {
+        ...article,
+        id: 'art-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: article.title + ' (Copy)'
+      };
+      addArticle(dup);
+    };
+  }
+
+  const delBtn = ctx.querySelector('.ctx-del-art');
+  if (delBtn) {
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      deleteArticle(article.id);
+    };
+  }
+
+  ctx.querySelectorAll('.move-to-f-item').forEach(item => {
+    item.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      const targetF = item.dataset.folder;
+      article.folderName = targetF;
+      saveArticles(article);
+      renderSidebar();
+    };
+  });
+
+  positionContextMenu(x, y);
+}
+
+function showFolderContextMenu(x, y, folderName) {
+  const ctx = document.getElementById('app-context-menu');
+  if (!ctx) return;
+
+  const editSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+  const addSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
+  const trashSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+
+  ctx.innerHTML = `
+    <div class="context-menu-item ctx-new-folder">${addSvg} <span>New Folder</span></div>
+    ${folderName !== 'Uncategorized' ? `
+      <div class="context-menu-item ctx-rename-folder">${editSvg} <span>Rename Folder</span></div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item danger ctx-del-folder">${trashSvg} <span>Delete Folder</span></div>
+    ` : ''}
+  `;
+
+  const newBtn = ctx.querySelector('.ctx-new-folder');
+  if (newBtn) {
+    newBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      handleCreateFolder();
+    };
+  }
+
+  const renBtn = ctx.querySelector('.ctx-rename-folder');
+  if (renBtn) {
+    renBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      handleRenameFolder(folderName);
+    };
+  }
+
+  const delBtn = ctx.querySelector('.ctx-del-folder');
+  if (delBtn) {
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      handleDeleteFolder(folderName);
+    };
+  }
+
+  positionContextMenu(x, y);
+}
+
+// Global Context Menu Dismiss
+document.addEventListener('click', hideContextMenu);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideContextMenu();
+});
+
 // Initialize Application (async — IndexedDB requires awaiting)
 async function init() {
   if (typeof marked !== 'undefined') {
@@ -168,6 +424,7 @@ async function init() {
   setupPanAndZoom();
   setupWindowControls();
   setupScrollSpy();
+  setupTextHighlighter();
   renderSidebar();
 
   if (articles.length > 0) {
@@ -192,143 +449,14 @@ async function loadArticles() {
     }
 
     articles = await dbGetAll();
+    // Filter out any obsolete sample/test template articles if they exist in cache
+    articles = articles.filter(a => a.id !== 'test-1' && a.id !== 'art-sample-1' && a.id !== 'art-sample-2' && a.title !== 'Acute Coronary Syndrome');
     // Sort newest first (matching original order)
     articles.sort((a, b) => (b.id > a.id ? 1 : -1));
-
-    // Seed sample articles only on absolute first launch
-    if (articles.length === 0 && !localStorage.getItem(INITIALIZED_KEY)) {
-      articles = [getSampleArticle(), getSampleArticle2()];
-      localStorage.setItem(INITIALIZED_KEY, 'true');
-      for (const a of articles) { await dbPut(a); }
-    }
   } catch (e) {
     console.error('[Coursology] Failed to load articles from IndexedDB:', e);
     articles = [];
   }
-}
-
-// Sample article 1
-function getSampleArticle() {
-  return {
-    id: 'art-sample-1',
-    title: 'Insomnia And Medications For Sleep',
-    extractedAt: new Date().toLocaleDateString(),
-    markdown: `
-# Introduction
-
-Insomnia is the most prevalent sleep disorder encountered in clinical practice, characterized by persistent difficulty with sleep initiation, duration, consolidation, or quality despite adequate opportunity for sleep.
-
-# Relevant Physiology
-
-## Wakefulness System
-Arousal is driven by ascending monoaminergic pathways (norepinephrine, histamine, serotonin, dopamine) and peptidergic systems (orexin/hypocretin) originating in the brainstem and hypothalamus.
-
-## Inhibitory System
-Sleep onset requires active inhibition of arousal centers, primarily mediated by gamma-aminobutyric acid (GABA) and galanin-releasing neurons in the ventrolateral preoptic nucleus (VLPO).
-
-## Principles Of Sleep Medicine
-Management targets specific neurochemical systems to promote sleep onset, sleep maintenance, or balance circadian rhythms.
-
-# Benzodiazepines
-
-## Mechanism
-Bind to GABAA receptor gamma subunit, enhancing GABA-induced chloride influx and neuronal hyperpolarization.
-
-## Use
-Short-term management of acute insomnia when severe; less preferred due to tolerance and dependance.
-
-## Adverse Effects
-Sedation, anterograde amnesia, motor impairment, rebound insomnia, tolerance, and physical dependence.
-
-# Nonbenzodiazepines (GABAergic Z-drugs)
-
-## Mechanism
-Selective agonists at GABAA receptors containing alpha-1 subunits (zolpidem, zaleplon, eszopiclone).
-
-## Use
-First-line sleep pharmacotherapy for short-term use.
-
-## Adverse Effects
-Complex sleep behaviors (sleep-walking, sleep-driving), morning sedation, and dizziness.
-
-# Melatonin Receptor Agonists
-
-## Mechanism
-Ramelteon acts as a selective agonist at MT1 and MT2 receptors in the suprachiasmatic nucleus.
-
-## Use
-Insomnia characterized by difficulty with sleep onset.
-
-## Adverse Effects
-Headache, somnolence, fatigue, no risk of abuse or dependence.
-
-# Orexin Receptor Antagonists
-
-## Mechanism
-Dual orexin receptor antagonists (DORAs) like suvorexant and lemborexant block OX1R and OX2R, inhibiting wakefulness.
-
-## Indications
-Insomnia characterized by difficulty with sleep onset and/or sleep maintenance.
-
-## Adverse Effects
-Somnolence, abnormal dreams, sleep paralysis, and worsening depression.
-
-# Nonspecific Medications
-
-## Antihistamines
-First-generation H1 antagonists (diphenhydramine, doxylamine) cross blood-brain barrier causing sedation.
-
-## Sedating Antidepressants
-Low-dose trazodone, doxepin, or mirtazapine used for insomnia with comorbid mood disorders.
-
-## Atypical Antipsychotics
-Low-dose quetiapine utilized off-label; limited by metabolic adverse effects.
-
-# General Approach
-
-## Before Medications
-Always initiate cognitive behavioral therapy for insomnia (CBT-I) and optimize sleep hygiene first.
-
-## Medications
-Select agents based on targeted sleep complaint (onset vs maintenance) and patient comorbidity profile.
-
-# Summary
-
-Insomnia therapy requires a structured diagnostic and therapeutic approach, combining CBT-I with targeted pharmacotherapy when appropriate.
-`
-  };
-}
-
-// Sample article 2
-function getSampleArticle2() {
-  return {
-    id: 'art-sample-2',
-    title: 'Acute Pericarditis & Cardiac Tamponade Overview',
-    extractedAt: new Date().toLocaleDateString(),
-    markdown: `
-# Introduction
-Acute pericarditis is an inflammatory syndrome of the pericardium presenting with acute pleuritic chest pain.
-
-# Clinical Presentation
-Chest pain characteristically improves when leaning forward and worsens when supine. High-pitched friction rub on auscultation.
-
-# Diagnostic Findings
-Diffuse PR-segment depression and concave ST-segment elevation across leads (Figure 1).
-
-Chest radiography in tamponade demonstrates cardiomegaly with a classic "water-bottle" heart silhouette (Figure 2).
-
-# Comparison Table
-
-| Feature | Acute Pericarditis | Cardiac Tamponade |
-| --- | --- | --- |
-| **ECG Findings** | Diffuse ST elevation, PR depression | Electrical alternans, low voltage |
-| **Physical Exam** | Pericardial friction rub | Beck triad |
-
-![Figure 1: Diffuse ST-segment elevation in acute pericarditis](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Pericarditis_ECG.png/640px-Pericarditis_ECG.png)
-
-![Figure 2: Water-bottle sign on chest radiography](https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Chest_Xray_water_bottle_sign.jpg/640px-Chest_Xray_water_bottle_sign.jpg)
-`
-  };
 }
 
 // Save a single article to IndexedDB (called per-article, not full array dump)
@@ -351,6 +479,9 @@ const importJsonInput = document.getElementById('import-json-input');
 
 // Setup Event Listeners
 function setupEventListeners() {
+  const createFolderBtn = document.getElementById('create-folder-btn');
+  if (createFolderBtn) createFolderBtn.addEventListener('click', handleCreateFolder);
+
   if (pasteBtn) pasteBtn.addEventListener('click', handleClipboardPaste);
   if (welcomePasteBtn) welcomePasteBtn.addEventListener('click', handleClipboardPaste);
 
@@ -700,6 +831,9 @@ async function optimizeMarkdownImages(mdText) {
 
 // Add or update article
 async function addArticle(articleData, autoSave = true) {
+  if (!articleData.folderName) {
+    articleData.folderName = activeFolderName || 'Uncategorized';
+  }
   if (articleData && articleData.markdown) {
     articleData.markdown = await optimizeMarkdownImages(articleData.markdown);
   }
@@ -711,6 +845,7 @@ async function addArticle(articleData, autoSave = true) {
   }
 
   if (autoSave) await saveArticles(articleData);
+  renderSidebar();
   displayArticle(articleData.id);
 }
 
@@ -721,6 +856,24 @@ function createArticleListItem(article) {
   if (isActive) {
     li.className = 'active' + (activeTocCollapsed ? ' toc-collapsed' : '');
   }
+
+  // HTML5 Drag and Drop support on articles
+  li.setAttribute('draggable', 'true');
+  li.ondragstart = (e) => {
+    e.dataTransfer.setData('text/plain', article.id);
+    e.dataTransfer.effectAllowed = 'move';
+    li.classList.add('dragging');
+  };
+  li.ondragend = () => {
+    li.classList.remove('dragging');
+  };
+
+  // Right Click Context Menu on Article
+  li.oncontextmenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showArticleContextMenu(e.clientX, e.clientY, article);
+  };
 
   const rowDiv = document.createElement('div');
   rowDiv.className = 'article-row-item';
@@ -835,20 +988,21 @@ function createArticleListItem(article) {
   return li;
 }
 
-// Render Clean Flat Article List & Expandable/Collapsible Active Article TOC
+// Render Clean Sidebar Folder List & Article Tree
 function renderSidebar() {
   const query = searchInput.value.toLowerCase().trim();
   articleFlatList.innerHTML = '';
 
   const filtered = articles.filter(a => 
     a.title.toLowerCase().includes(query) || 
-    (a.markdown && a.markdown.toLowerCase().includes(query))
+    (a.markdown && a.markdown.toLowerCase().includes(query)) ||
+    (a.folderName && a.folderName.toLowerCase().includes(query))
   );
 
   articleCount.innerText = `${articles.length} article${articles.length === 1 ? '' : 's'}`;
 
   if (filtered.length === 0) {
-    articleFlatList.innerHTML = `<div style="font-size:0.85rem; color:#94a3b8; text-align:center; padding:12px;">No articles found</div>`;
+    articleFlatList.innerHTML = `<div style="font-size:0.85rem; color:#94a3b8; text-align:center; padding:16px;">No articles found</div>`;
     if (articles.length === 0) {
       welcomeState.classList.remove('hidden');
       articleContent.classList.add('hidden');
@@ -859,40 +1013,88 @@ function renderSidebar() {
     return;
   }
 
-  const folderGroups = {};
-  const topLevelArticles = [];
-
+  // Ensure all article folder names exist in `folders` list
   filtered.forEach(art => {
-    if (art.folderName) {
-      if (!folderGroups[art.folderName]) folderGroups[art.folderName] = [];
-      folderGroups[art.folderName].push(art);
-    } else {
-      topLevelArticles.push(art);
-    }
+    const fn = art.folderName || 'Uncategorized';
+    if (!folders.includes(fn)) folders.push(fn);
   });
 
-  const folderChevronSvg = `<svg class="folder-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+  const folderSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="#2563eb" style="width:16px; height:16px; flex-shrink:0;"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+  const editSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
+  const trashSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+  const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px; height:14px;"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
 
-  // Render Folders
-  Object.keys(folderGroups).forEach(folderName => {
-    const groupArticles = folderGroups[folderName];
+  folders.forEach(folderName => {
+    const groupArticles = filtered.filter(a => (a.folderName || 'Uncategorized') === folderName);
+    if (query && groupArticles.length === 0) return;
+
     const isCollapsed = folderCollapseState.has(folderName);
+    const isActiveTarget = (activeFolderName === folderName);
 
     const folderCard = document.createElement('div');
-    folderCard.className = 'sidebar-folder-card' + (isCollapsed ? ' collapsed' : '');
+    folderCard.className = 'sidebar-folder-card' + (isCollapsed ? ' collapsed' : '') + (isActiveTarget ? ' active-target-folder' : '');
+
+    // Folder Drag and Drop Target Handlers
+    folderCard.ondragover = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      folderCard.classList.add('drag-over');
+    };
+
+    folderCard.ondragleave = () => {
+      folderCard.classList.remove('drag-over');
+    };
+
+    folderCard.ondrop = async (e) => {
+      e.preventDefault();
+      folderCard.classList.remove('drag-over');
+      const articleId = e.dataTransfer.getData('text/plain');
+      if (!articleId) return;
+
+      const targetArt = articles.find(a => a.id === articleId);
+      if (targetArt && (targetArt.folderName || 'Uncategorized') !== folderName) {
+        targetArt.folderName = folderName;
+        await saveArticles(targetArt);
+        renderSidebar();
+      }
+    };
 
     const folderHeader = document.createElement('div');
     folderHeader.className = 'sidebar-folder-header';
     folderHeader.innerHTML = `
-      <div class="sidebar-folder-title">
-        <span>📁</span>
-        <span>${folderName}</span>
-        <span style="font-size:0.78rem; font-weight:normal; opacity:0.75;">(${groupArticles.length})</span>
+      <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
+        ${folderSvg}
+        <span style="font-weight:600; font-size:0.9rem;">${folderName}</span>
+        <span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(${groupArticles.length})</span>
       </div>
-      ${folderChevronSvg}
+      <div class="folder-actions" style="display:flex; align-items:center; gap:6px;">
+        ${folderName !== 'Uncategorized' ? `
+          <button class="folder-action-btn rename-f-btn" title="Rename Folder" style="background:none; border:none; padding:3px; cursor:pointer; color:#64748b; display:flex;">${editSvg}</button>
+          <button class="folder-action-btn delete-f-btn" title="Delete Folder" style="background:none; border:none; padding:3px; cursor:pointer; color:#ef4444; display:flex;">${trashSvg}</button>
+        ` : ''}
+        <span style="display:flex; align-items:center; color:#94a3b8; transition:transform 0.2s ease; transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};">${chevronSvg}</span>
+      </div>
     `;
 
+    // Folder Context Menu
+    folderHeader.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showFolderContextMenu(e.clientX, e.clientY, folderName);
+    };
+
+    const renameBtn = folderHeader.querySelector('.rename-f-btn');
+    if (renameBtn) {
+      renameBtn.onclick = (e) => { e.stopPropagation(); handleRenameFolder(folderName); };
+    }
+
+    const deleteBtn = folderHeader.querySelector('.delete-f-btn');
+    if (deleteBtn) {
+      deleteBtn.onclick = (e) => { e.stopPropagation(); handleDeleteFolder(folderName); };
+    }
+
     folderHeader.onclick = () => {
+      activeFolderName = folderName;
       if (folderCollapseState.has(folderName)) {
         folderCollapseState.delete(folderName);
       } else {
@@ -902,7 +1104,7 @@ function renderSidebar() {
     };
 
     const folderUl = document.createElement('ul');
-    folderUl.className = 'folder-article-list';
+    folderUl.className = 'folder-article-list' + (isCollapsed ? ' hidden' : '');
 
     groupArticles.forEach(art => {
       folderUl.appendChild(createArticleListItem(art));
@@ -911,11 +1113,6 @@ function renderSidebar() {
     folderCard.appendChild(folderHeader);
     folderCard.appendChild(folderUl);
     articleFlatList.appendChild(folderCard);
-  });
-
-  // Render Top Level Articles
-  topLevelArticles.forEach(art => {
-    articleFlatList.appendChild(createArticleListItem(art));
   });
 }
 
@@ -1552,17 +1749,104 @@ function processFigureAndTableLinks(container) {
   });
 }
 
+// Open Image in Clean Viewer Tab
+function openImageInNewTab(imgUrl) {
+  if (!imgUrl) return;
+  const newTab = window.open('');
+  if (newTab) {
+    newTab.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Medical Library - Image View</title>
+        <style>
+          html, body { margin:0; padding:0; background:#0f172a; height:100%; display:flex; align-items:center; justify-content:center; overflow:auto; }
+          img { max-width:98vw; max-height:98vh; object-fit:contain; border-radius:6px; box-shadow:0 20px 30px rgba(0,0,0,0.5); }
+        </style>
+      </head>
+      <body>
+        <img src="${imgUrl}" alt="Full Resolution Image" />
+      </body>
+      </html>
+    `);
+    newTab.document.close();
+  }
+}
+
+// Persistent Auto Text Highlighter (Bright Yellow)
+function setupTextHighlighter() {
+  const articleBody = document.getElementById('article-body');
+  if (!articleBody) return;
+
+  articleBody.addEventListener('mouseup', () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText || selectedText.length < 2) return;
+
+    const range = selection.getRangeAt(0);
+    const container = range.commonAncestorContainer;
+
+    if (!articleBody.contains(container)) return;
+
+    const mark = document.createElement('mark');
+    mark.className = 'yellow-highlight';
+    mark.style.backgroundColor = '#fef08a';
+    mark.style.color = '#1e293b';
+    mark.style.fontWeight = '600';
+    mark.style.padding = '1px 4px';
+    mark.style.borderRadius = '3px';
+    mark.title = 'Click to remove highlight';
+
+    try {
+      range.surroundContents(mark);
+      selection.removeAllRanges();
+
+      mark.onclick = (e) => {
+        e.stopPropagation();
+        const text = mark.innerText;
+        mark.replaceWith(text);
+        saveCurrentArticleHighlights();
+      };
+
+      saveCurrentArticleHighlights();
+    } catch (e) {
+      // Ignore cross-node range wrapping errors gracefully
+    }
+  });
+}
+
+function saveCurrentArticleHighlights() {
+  if (!activeArticleId) return;
+  const art = articles.find(a => a.id === activeArticleId);
+  if (!art) return;
+
+  const articleBody = document.getElementById('article-body');
+  if (articleBody) {
+    art.html = articleBody.innerHTML;
+    saveArticles(art);
+  }
+}
+
 // Setup Mouse Drag Pan & Scroll Zoom
 function setupPanAndZoom() {
   const zoomInBtn = document.getElementById('tool-zoom-in');
   const zoomOutBtn = document.getElementById('tool-zoom-out');
   const zoomResetBtn = document.getElementById('tool-zoom-reset');
   const rotateBtn = document.getElementById('tool-rotate');
+  const openTabBtn = document.getElementById('tool-open-tab');
 
   if (zoomInBtn) zoomInBtn.addEventListener('click', () => { imgZoom += 0.25; updateImageTransform(); });
   if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => { imgZoom = Math.max(0.3, imgZoom - 0.25); updateImageTransform(); });
   if (zoomResetBtn) zoomResetBtn.addEventListener('click', resetImageTransform);
   if (rotateBtn) rotateBtn.addEventListener('click', () => { imgRotation = (imgRotation + 90) % 360; updateImageTransform(); });
+  if (openTabBtn) {
+    openTabBtn.addEventListener('click', () => {
+      const src = lightboxImg ? lightboxImg.src : null;
+      if (src) openImageInNewTab(src);
+    });
+  }
 
   const viewports = [
     document.getElementById('lightbox-viewport'),
@@ -2211,7 +2495,8 @@ async function handleExportFolderPackage() {
     const mediaUrlMap = new Map(); // cdnUrl -> relative path
     let mediaCounter = 0;
 
-    // Scan all articles for CDN media URLs, base64 images, and video assets
+    // Scan all articles ONLY for figure images (skipping all video files)
+    const isVideoUrl = (u) => /\.(mp4|webm|mov|avi|mkv|flv|wmv)(\?.*)?$/i.test(u) || (u && u.startsWith('data:video'));
     const mediaUrlsToFetch = new Set();
     articles.forEach(art => {
       const content = (art.markdown || '') + ' ' + (art.html || '');
@@ -2219,7 +2504,9 @@ async function handleExportFolderPackage() {
       // 1. img src
       const imgMatches = content.matchAll(/<img[^>]+src=["']?([^"'\s>]+)["']?/gi);
       for (const m of imgMatches) {
-        if (m[1] && !m[1].startsWith('media/')) mediaUrlsToFetch.add(m[1]);
+        if (m[1] && !m[1].startsWith('media/') && !isVideoUrl(m[1])) {
+          mediaUrlsToFetch.add(m[1]);
+        }
       }
 
       // 2. markdown images ![alt](url)
@@ -2227,20 +2514,18 @@ async function handleExportFolderPackage() {
       for (const m of mdImgMatches) {
         if (m[1]) {
           const cleanUrl = m[1].split(/\s+/)[0].trim();
-          if (cleanUrl && !cleanUrl.startsWith('media/')) mediaUrlsToFetch.add(cleanUrl);
+          if (cleanUrl && !cleanUrl.startsWith('media/') && !isVideoUrl(cleanUrl)) {
+            mediaUrlsToFetch.add(cleanUrl);
+          }
         }
       }
 
-      // 3. video / source src
-      const vidMatches = content.matchAll(/<(?:video|source)[^>]+src=["']?([^"'\s>]+)["']?/gi);
-      for (const m of vidMatches) {
-        if (m[1] && !m[1].startsWith('media/')) mediaUrlsToFetch.add(m[1]);
-      }
-
-      // 4. data-cdn-src attribute
+      // 3. data-cdn-src attribute
       const cdnMatches = content.matchAll(/data-cdn-src=["']?([^"'\s>]+)["']?/gi);
       for (const m of cdnMatches) {
-        if (m[1] && !m[1].startsWith('media/')) mediaUrlsToFetch.add(m[1]);
+        if (m[1] && !m[1].startsWith('media/') && !isVideoUrl(m[1])) {
+          mediaUrlsToFetch.add(m[1]);
+        }
       }
     });
 
@@ -2365,11 +2650,21 @@ async function handleImportZipPackage(e) {
     const zip = await JSZip.loadAsync(file);
     const zipFolderName = file.name.replace(/\.zip$/i, '');
 
-    // Extract media files into localBlobStore
+    // Extract media files into localBlobStore with explicit MIME types
     const mediaFiles = zip.filter((relPath, fileObj) => relPath.startsWith('media/') && !fileObj.dir);
     for (const mFile of mediaFiles) {
-      const blob = await mFile.async('blob');
-      const blobUrl = URL.createObjectURL(blob);
+      const ext = mFile.name.split('.').pop().toLowerCase();
+      let mimeType = 'image/png';
+      if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+      else if (ext === 'webp') mimeType = 'image/webp';
+      else if (ext === 'gif') mimeType = 'image/gif';
+      else if (ext === 'svg') mimeType = 'image/svg+xml';
+      else if (ext === 'mp4') mimeType = 'video/mp4';
+
+      const arrayBuffer = await mFile.async('arraybuffer');
+      const typedBlob = new Blob([arrayBuffer], { type: mimeType });
+      const blobUrl = URL.createObjectURL(typedBlob);
+
       localBlobStore.set(mFile.name, blobUrl);
       const baseName = mFile.name.replace(/^media\//, '');
       localBlobStore.set(baseName, blobUrl);
