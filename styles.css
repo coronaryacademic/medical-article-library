@@ -1676,7 +1676,7 @@ mark.yellow-highlight {
   font-size: inherit !important;
   font-weight: inherit !important;
   font-style: inherit !important;
-  line-height: inherit !important;
+  line-height: 1.52 !important;
   letter-spacing: inherit !important;
   word-spacing: inherit !important;
   padding: 0 !important;
@@ -1695,7 +1695,7 @@ mark.yellow-highlight * {
   font-size: inherit !important;
   font-weight: inherit !important;
   font-style: inherit !important;
-  line-height: inherit !important;
+  line-height: 1.52 !important;
   letter-spacing: inherit !important;
   padding: 0 !important;
   margin: 0 !important;
