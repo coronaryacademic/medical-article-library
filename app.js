@@ -163,6 +163,28 @@ let folders = ['Uncategorized'];
 let activeFolderName = 'Uncategorized';
 let API_BASE_URL = '';
 
+function saveFoldersToStorage() {
+  try {
+    localStorage.setItem('medical_library_folders', JSON.stringify(folders));
+  } catch (e) {}
+}
+
+function loadFoldersFromStorage() {
+  const saved = localStorage.getItem('medical_library_folders');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(f => {
+          if (f && typeof f === 'string' && !f.includes('${') && !folders.includes(f)) {
+            folders.push(f);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+}
+
 async function handleCreateFolder() {
   const folderName = prompt('Enter new folder name:');
   if (!folderName || !folderName.trim()) return;
@@ -170,6 +192,7 @@ async function handleCreateFolder() {
   if (!folders.includes(cleanName)) {
     folders.push(cleanName);
     activeFolderName = cleanName;
+    saveFoldersToStorage();
     if (API_BASE_URL) {
       try {
         await fetch(`${API_BASE_URL}/api/create-folder`, {
@@ -213,6 +236,7 @@ async function handleRenameFolder(oldName) {
     } catch (e) {}
   }
 
+  saveFoldersToStorage();
   saveArticles();
   renderSidebar();
 }
@@ -246,10 +270,13 @@ async function handleDeleteFolder(folderName) {
       } catch (e) {}
     }
 
+    saveFoldersToStorage();
+
     if (activeArticleId && !articles.some(a => a.id === activeArticleId)) {
       activeArticleId = articles.length > 0 ? articles[0].id : null;
     }
 
+    await saveArticles();
     await syncLibraryToBackend();
     renderSidebar();
     if (activeArticleId) {
@@ -432,6 +459,8 @@ async function init() {
   }
 }
 
+let activeFilterTab = 'all'; // 'all', 'fetched', 'pending'
+
 // Load articles from IndexedDB (migrates from localStorage on first upgrade)
 async function loadArticles() {
   try {
@@ -449,9 +478,33 @@ async function loadArticles() {
     }
 
     articles = await dbGetAll();
+    loadFoldersFromStorage();
     // Filter out any obsolete sample/test template articles if they exist in cache
     articles = articles.filter(a => a.id !== 'test-1' && a.id !== 'art-sample-1' && a.id !== 'art-sample-2' && a.title !== 'Acute Coronary Syndrome');
-    // Sort newest first (matching original order)
+
+    // If IndexedDB is empty, seed from default library_data/library.json catalog
+    if (articles.length === 0) {
+      try {
+        const resp = await fetch('library_data/library.json');
+        if (resp.ok) {
+          const libData = await resp.json();
+          if (libData.folders && Array.isArray(libData.folders)) {
+            folders = [...libData.folders];
+          }
+          if (libData.articles && Array.isArray(libData.articles)) {
+            for (const art of libData.articles) {
+              art.fetched = art.fetched || false;
+              articles.push(art);
+              await dbPut(art);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Coursology] Could not load default library.json:', e);
+      }
+    }
+
+    // Sort newest first or by master ID
     articles.sort((a, b) => (b.id > a.id ? 1 : -1));
   } catch (e) {
     console.error('[Coursology] Failed to load articles from IndexedDB:', e);
@@ -482,8 +535,8 @@ function setupEventListeners() {
   const createFolderBtn = document.getElementById('create-folder-btn');
   if (createFolderBtn) createFolderBtn.addEventListener('click', handleCreateFolder);
 
-  if (pasteBtn) pasteBtn.addEventListener('click', handleClipboardPaste);
-  if (welcomePasteBtn) welcomePasteBtn.addEventListener('click', handleClipboardPaste);
+  if (pasteBtn) pasteBtn.addEventListener('click', () => handleClipboardPaste());
+  if (welcomePasteBtn) welcomePasteBtn.addEventListener('click', () => handleClipboardPaste());
 
   const exportFolderBtn = document.getElementById('export-folder-btn');
   const importZipInput = document.getElementById('import-zip-input');
@@ -495,6 +548,42 @@ function setupEventListeners() {
   if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
   if (exportAllBtn) exportAllBtn.addEventListener('click', handleExportBackup);
   if (exportFolderBtn) exportFolderBtn.addEventListener('click', handleExportFolderPackage);
+
+
+
+  // Site Navigation Tree Modal Handlers
+  const importTreeBtn = document.getElementById('import-tree-btn');
+  const treeModal = document.getElementById('tree-import-modal');
+  const closeTreeModalBtn = document.getElementById('close-tree-modal-btn');
+  const cancelTreeModalBtn = document.getElementById('cancel-tree-modal-btn');
+  const submitTreeModalBtn = document.getElementById('submit-tree-modal-btn');
+  const treeHtmlInput = document.getElementById('tree-html-input');
+
+  if (importTreeBtn && treeModal) {
+    importTreeBtn.addEventListener('click', () => {
+      treeModal.classList.remove('hidden');
+      if (treeHtmlInput) treeHtmlInput.focus();
+    });
+  }
+
+  const hideTreeModal = () => {
+    if (treeModal) treeModal.classList.add('hidden');
+    if (treeHtmlInput) treeHtmlInput.value = '';
+  };
+
+  if (closeTreeModalBtn) closeTreeModalBtn.addEventListener('click', hideTreeModal);
+  if (cancelTreeModalBtn) cancelTreeModalBtn.addEventListener('click', hideTreeModal);
+  if (submitTreeModalBtn) {
+    submitTreeModalBtn.addEventListener('click', () => {
+      const val = treeHtmlInput ? treeHtmlInput.value : '';
+      if (!val || !val.trim()) {
+        alert('Please paste an HTML DOM snippet or JSON tree first.');
+        return;
+      }
+      parseAndImportHtmlTree(val);
+      hideTreeModal();
+    });
+  }
 
   if (articleCollapseAllBtn) articleCollapseAllBtn.addEventListener('click', collapseAllArticleSections);
   if (articleExpandAllBtn) articleExpandAllBtn.addEventListener('click', expandAllArticleSections);
@@ -691,44 +780,247 @@ async function copyScriptCode() {
   }
 }
 
+function normalizeTitle(t) {
+  if (!t) return '';
+  return t.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+}
+
+function parseAndImportHtmlTree(rawInput) {
+  if (!rawInput || !rawInput.trim()) return;
+
+  let addedCount = 0;
+  let folderCount = 0;
+
+  // 1. Try direct or embedded JSON first
+  let jsonData = null;
+  try {
+    jsonData = JSON.parse(rawInput);
+  } catch (e) {
+    const jsonMatch = rawInput.match(/\{\s*"folders"[\s\S]*"articles"[\s\S]*\}/);
+    if (jsonMatch) {
+      try { jsonData = JSON.parse(jsonMatch[0]); } catch (err) {}
+    }
+  }
+
+  if (jsonData && (jsonData.folders || jsonData.articles)) {
+    if (Array.isArray(jsonData.folders)) {
+      jsonData.folders.forEach(f => {
+        const fname = typeof f === 'string' ? f : (f.name || f.folderName);
+        if (fname && !folders.includes(fname)) {
+          folders.push(fname);
+          folderCount++;
+        }
+      });
+    }
+    if (Array.isArray(jsonData.articles)) {
+      jsonData.articles.forEach(art => {
+        const title = typeof art === 'string' ? art : art.title;
+        const folder = art.folderName || 'Uncategorized';
+        if (title && !articles.some(a => normalizeTitle(a.title) === normalizeTitle(title))) {
+          const masterArt = {
+            id: 'master-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            title: title.trim(),
+            folderName: folder,
+            fetched: false,
+            markdown: null
+          };
+          articles.push(masterArt);
+          dbPut(masterArt);
+          addedCount++;
+        }
+      });
+    }
+    saveArticles();
+    renderSidebar();
+    alert(`Imported Tree: ${folderCount} new folder(s), ${addedCount} pending article(s) added!`);
+    return;
+  }
+
+  // 2. Try raw Console Log text (lines containing 📁 Folder: and 📄 Article:)
+  if (rawInput.includes('📁 Folder') || rawInput.includes('📄 Article')) {
+    let currentF = 'Uncategorized';
+    const lines = rawInput.split('\n');
+    lines.forEach(line => {
+      const folderMatch = line.match(/📁\s*Folder:\s*"([^"]+)"/i);
+      if (folderMatch && folderMatch[1]) {
+        currentF = folderMatch[1].trim();
+        if (!folders.includes(currentF)) {
+          folders.push(currentF);
+          folderCount++;
+        }
+      }
+
+      const articleMatch = line.match(/📄\s*Article:\s*"([^"]+)"\s*(?:->\s*\[([^\]]+)\])?/i);
+      if (articleMatch && articleMatch[1]) {
+        const title = articleMatch[1].trim();
+        const fName = articleMatch[2] ? articleMatch[2].trim() : currentF;
+        const norm = normalizeTitle(title);
+        if (norm && !articles.some(a => normalizeTitle(a.title) === norm)) {
+          const masterArt = {
+            id: 'master-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            title: title,
+            folderName: fName,
+            fetched: false,
+            markdown: null
+          };
+          articles.push(masterArt);
+          dbPut(masterArt);
+          addedCount++;
+        }
+      }
+    });
+
+    if (addedCount > 0 || folderCount > 0) {
+      saveArticles();
+      renderSidebar();
+      alert(`Imported Console Logs: ${folderCount} new folder(s), ${addedCount} pending article(s) added!`);
+      return;
+    }
+  }
+
+  // Parse HTML DOM string
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawInput, 'text/html');
+
+  let currentFolder = 'Uncategorized';
+  
+  // Find all buttons or row elements in tree
+  const rows = Array.from(doc.body.querySelectorAll('button, a, div[class*="whitespace-nowrap"], div[class*="flex flex-row"]'));
+  rows.forEach(el => {
+    const span = el.querySelector('span') || el;
+    const text = span.innerText ? span.innerText.replace(/\u00a0/g, ' ').trim() : '';
+    if (!text || text.length > 120 || text.includes('\n')) return;
+
+    const html = el.outerHTML ? el.outerHTML.toLowerCase() : '';
+    const svg = el.querySelector('svg');
+    const dataIcon = svg ? (svg.getAttribute('data-icon') || '') : '';
+
+    const isFolder = dataIcon.includes('folder') || html.includes('fa-folder') || (html.includes('folder') && !html.includes('newspaper'));
+    const isArticle = dataIcon.includes('newspaper') || html.includes('fa-newspaper') || html.includes('newspaper');
+
+    if (isFolder && text) {
+      currentFolder = text;
+      if (!folders.includes(text)) {
+        folders.push(text);
+        folderCount++;
+      }
+    } else if (isArticle && text) {
+      const norm = normalizeTitle(text);
+      if (norm && !articles.some(a => normalizeTitle(a.title) === norm)) {
+        const masterArt = {
+          id: 'master-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          title: text,
+          folderName: currentFolder,
+          fetched: false,
+          markdown: null
+        };
+        articles.push(masterArt);
+        dbPut(masterArt);
+        addedCount++;
+      }
+    }
+  });
+
+  // Fallback if no specific icons found: extract clickable buttons/links
+  if (addedCount === 0 && folderCount === 0) {
+    const buttons = doc.querySelectorAll('button, a, div.whitespace-nowrap');
+    buttons.forEach(btn => {
+      const text = btn.innerText ? btn.innerText.trim() : '';
+      if (!text || text.length > 80 || text.includes('\n')) return;
+
+      const norm = normalizeTitle(text);
+      if (norm && !articles.some(a => normalizeTitle(a.title) === norm)) {
+        const masterArt = {
+          id: 'master-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          title: text,
+          folderName: activeFolderName || 'Uncategorized',
+          fetched: false,
+          markdown: null
+        };
+        articles.push(masterArt);
+        dbPut(masterArt);
+        addedCount++;
+      }
+    });
+  }
+
+  saveArticles();
+  renderSidebar();
+  alert(`Imported Site Tree: ${folderCount} new folder(s), ${addedCount} pending article(s) added!`);
+}
+
 // Handle Clipboard Paste
-async function handleClipboardPaste() {
+async function handleClipboardPaste(targetFolder = null, targetArticleId = null) {
   try {
     const text = await navigator.clipboard.readText();
     if (!text || !text.trim()) {
-      alert('Clipboard is empty! Click "Copy Article MD" on Coursology first.');
+      const manualText = prompt('Clipboard is empty! Paste your copied Markdown text here:');
+      if (manualText) await parseAndAddMarkdown(manualText, targetFolder, targetArticleId);
       return;
     }
 
-    await parseAndAddMarkdown(text);
+    await parseAndAddMarkdown(text, targetFolder, targetArticleId);
   } catch (err) {
     const manualText = prompt('Paste your copied Markdown text here:');
     if (manualText) {
-      await parseAndAddMarkdown(manualText);
+      await parseAndAddMarkdown(manualText, targetFolder, targetArticleId);
     }
   }
 }
 
 // Parse Markdown frontmatter & clean body
-async function parseAndAddMarkdown(mdText) {
+async function parseAndAddMarkdown(mdText, targetFolder = null, targetArticleId = null) {
   let title = 'Medical Article';
   let date = new Date().toLocaleDateString();
 
   const titleMatch = mdText.match(/title:\s*"([^"]+)"/);
   if (titleMatch && titleMatch[1] && titleMatch[1].toLowerCase() !== 'medical library') {
     title = titleMatch[1].trim();
+  } else {
+    const h1Match = mdText.match(/^#\s+(.+)$/m);
+    if (h1Match && h1Match[1]) {
+      title = h1Match[1].trim();
+    }
   }
 
   let cleanMarkdown = mdText.replace(/^---[\s\S]*?---\s*/, '');
+  const optimizedMarkdown = await optimizeMarkdownImages(cleanMarkdown);
 
-  const articleObj = {
-    id: 'art-' + Date.now(),
-    title: title,
-    extractedAt: date,
-    markdown: cleanMarkdown
-  };
+  let targetArticle = null;
+  const effectiveFolder = targetFolder || activeFolderName || 'Uncategorized';
+  const norm = normalizeTitle(title);
 
-  await addArticle(articleObj);
+  if (targetArticleId) {
+    targetArticle = articles.find(a => a.id === targetArticleId);
+  } else {
+    // Only match an existing article IF it is inside the target folder
+    targetArticle = articles.find(a => (a.folderName || 'Uncategorized') === effectiveFolder && normalizeTitle(a.title) === norm);
+  }
+
+  if (targetArticle) {
+    targetArticle.fetched = true;
+    targetArticle.markdown = optimizedMarkdown;
+    targetArticle.extractedAt = date;
+    targetArticle.folderName = effectiveFolder;
+    await saveArticles(targetArticle);
+    displayArticle(targetArticle.id);
+    alert(`✓ Marked "${targetArticle.title}" as fetched in folder "${targetArticle.folderName}"!`);
+  } else {
+    const newArt = {
+      id: 'art-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      title: title,
+      folderName: effectiveFolder,
+      fetched: true,
+      extractedAt: date,
+      markdown: optimizedMarkdown
+    };
+    articles.unshift(newArt);
+    await saveArticles(newArt);
+    displayArticle(newArt.id);
+    alert(`✓ Added new article "${title}" to folder "${newArt.folderName}"!`);
+  }
+
+  renderSidebar();
 }
 
 // Handle File Input (.md files)
@@ -853,8 +1145,11 @@ async function addArticle(articleData, autoSave = true) {
 function createArticleListItem(article) {
   const li = document.createElement('li');
   const isActive = article.id === activeArticleId;
+  const isFetched = article.fetched !== false && !!article.markdown;
+
+  li.className = (isActive ? 'active' : '') + (!isFetched ? ' pending-item' : '');
   if (isActive) {
-    li.className = 'active' + (activeTocCollapsed ? ' toc-collapsed' : '');
+    li.className += (activeTocCollapsed ? ' toc-collapsed' : '');
   }
 
   // HTML5 Drag and Drop support on articles
@@ -876,17 +1171,43 @@ function createArticleListItem(article) {
   };
 
   const rowDiv = document.createElement('div');
-  rowDiv.className = 'article-row-item';
+  rowDiv.className = 'article-row-item' + (!isFetched ? ' pending-item' : '');
 
   const titleWrapper = document.createElement('div');
   titleWrapper.className = 'article-title-wrapper';
 
+  const newspaperSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:16px; height:16px; flex-shrink:0; color:#334155;"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>`;
   const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-  if (isActive) {
-    titleWrapper.innerHTML = `${chevronSvg}<span class="article-title-text">${article.title}</span>`;
+  
+  if (isActive && isFetched) {
+    titleWrapper.innerHTML = `${newspaperSvg}${chevronSvg}<span class="article-title-text">${article.title}</span>`;
   } else {
-    titleWrapper.innerHTML = `<span class="article-title-text">${article.title}</span>`;
+    titleWrapper.innerHTML = `${newspaperSvg}<span class="article-title-text">${article.title}</span>`;
   }
+
+  const rightBox = document.createElement('div');
+  rightBox.style.display = 'flex';
+  rightBox.style.alignItems = 'center';
+  rightBox.style.gap = '6px';
+
+  if (!isFetched) {
+    const quickPasteBtn = document.createElement('button');
+    quickPasteBtn.className = 'quick-paste-btn';
+    quickPasteBtn.innerText = '+ Paste MD';
+    quickPasteBtn.title = `Paste MD directly into "${article.title}"`;
+    quickPasteBtn.onclick = (e) => {
+      e.stopPropagation();
+      handleClipboardPaste(article.folderName, article.id);
+    };
+    rightBox.appendChild(quickPasteBtn);
+  }
+
+  const bookmarkIcon = document.createElement('span');
+  bookmarkIcon.style.display = 'flex';
+  bookmarkIcon.style.alignItems = 'center';
+  bookmarkIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" style="width:16px; height:16px; display:block; cursor:pointer;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+  bookmarkIcon.title = 'Bookmark article';
+  rightBox.appendChild(bookmarkIcon);
 
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'delete-item';
@@ -896,12 +1217,13 @@ function createArticleListItem(article) {
     e.stopPropagation();
     deleteArticle(article.id);
   };
+  rightBox.appendChild(deleteBtn);
 
   rowDiv.appendChild(titleWrapper);
-  rowDiv.appendChild(deleteBtn);
+  rowDiv.appendChild(rightBox);
   li.appendChild(rowDiv);
 
-  if (isActive && currentArticleToc && currentArticleToc.length > 0) {
+  if (isActive && isFetched && currentArticleToc && currentArticleToc.length > 0) {
     const tocDiv = document.createElement('div');
     tocDiv.className = 'sidebar-toc' + (activeTocCollapsed ? ' collapsed' : '');
 
@@ -990,43 +1312,70 @@ function createArticleListItem(article) {
 
 // Render Clean Sidebar Folder List & Article Tree
 function renderSidebar() {
-  const query = searchInput.value.toLowerCase().trim();
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
   articleFlatList.innerHTML = '';
 
-  const filtered = articles.filter(a => 
+  let filtered = articles.filter(a => 
     a.title.toLowerCase().includes(query) || 
     (a.markdown && a.markdown.toLowerCase().includes(query)) ||
     (a.folderName && a.folderName.toLowerCase().includes(query))
   );
 
-  articleCount.innerText = `${articles.length} article${articles.length === 1 ? '' : 's'}`;
-
-  if (filtered.length === 0) {
-    articleFlatList.innerHTML = `<div style="font-size:0.85rem; color:#94a3b8; text-align:center; padding:16px;">No articles found</div>`;
-    if (articles.length === 0) {
-      welcomeState.classList.remove('hidden');
-      articleContent.classList.add('hidden');
-      if (mediaSidebar) mediaSidebar.classList.add('hidden');
-      const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
-      if (toggleRightBtn) toggleRightBtn.classList.add('hidden');
-    }
-    return;
+  if (activeFilterTab === 'fetched') {
+    filtered = filtered.filter(a => a.fetched !== false && !!a.markdown);
+  } else if (activeFilterTab === 'pending') {
+    filtered = filtered.filter(a => a.fetched === false || !a.markdown);
   }
+
+  const totalArticles = articles.length;
+  const fetchedArticles = articles.filter(a => a.fetched !== false && !!a.markdown).length;
+
+  if (articleCount) {
+    articleCount.innerText = `${fetchedArticles} / ${totalArticles} Fetched`;
+  }
+  const progressFill = document.getElementById('progress-bar-fill');
+  if (progressFill) {
+    const pct = totalArticles > 0 ? Math.round((fetchedArticles / totalArticles) * 100) : 0;
+    progressFill.style.width = `${pct}%`;
+  }
+
+  // Sanitize folders and articles from any template literal impurities
+  folders = folders.filter(f => f && !f.includes('${'));
+  articles = articles.filter(a => a && a.title && !a.title.includes('${') && !(a.folderName || '').includes('${'));
 
   // Ensure all article folder names exist in `folders` list
   filtered.forEach(art => {
     const fn = art.folderName || 'Uncategorized';
-    if (!folders.includes(fn)) folders.push(fn);
+    if (fn && !fn.includes('${') && !folders.includes(fn)) folders.push(fn);
   });
 
-  const folderSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="#2563eb" style="width:16px; height:16px; flex-shrink:0;"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+  if (articles.length === 0) {
+    welcomeState.classList.remove('hidden');
+    articleContent.classList.add('hidden');
+    if (mediaSidebar) mediaSidebar.classList.add('hidden');
+    const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+    if (toggleRightBtn) toggleRightBtn.classList.add('hidden');
+  }
+
+  articleFlatList.innerHTML = '';
+
+  if (folders.length === 0) {
+    articleFlatList.innerHTML = `<div style="font-size:0.85rem; color:#94a3b8; text-align:center; padding:16px;">No folders found</div>`;
+    return;
+  }
+
+  const folderSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="#0284c7" style="width:18px; height:18px; flex-shrink:0;"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
   const editSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
   const trashSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
   const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px; height:14px;"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
 
   folders.forEach(folderName => {
     const groupArticles = filtered.filter(a => (a.folderName || 'Uncategorized') === folderName);
-    if (query && groupArticles.length === 0) return;
+    if ((query || activeFilterTab !== 'all') && groupArticles.length === 0) return;
+
+    const allFolderArticles = articles.filter(a => (a.folderName || 'Uncategorized') === folderName);
+    const fetchedInFolder = allFolderArticles.filter(a => a.fetched !== false && !!a.markdown).length;
+    const totalInFolder = allFolderArticles.length;
 
     const isCollapsed = folderCollapseState.has(folderName);
     const isActiveTarget = (activeFolderName === folderName);
@@ -1064,10 +1413,10 @@ function renderSidebar() {
     folderHeader.innerHTML = `
       <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
         ${folderSvg}
-        <span style="font-weight:600; font-size:0.9rem;">${folderName}</span>
-        <span style="font-size:0.75rem; color:#64748b; font-weight:normal;">(${groupArticles.length})</span>
+        <span style="font-weight:600; font-size:0.92rem; color:#0284c7;">${folderName}</span>
       </div>
       <div class="folder-actions" style="display:flex; align-items:center; gap:6px;">
+        <button class="folder-paste-btn" title="Paste MD into this folder">+ Paste MD</button>
         ${folderName !== 'Uncategorized' ? `
           <button class="folder-action-btn rename-f-btn" title="Rename Folder" style="background:none; border:none; padding:3px; cursor:pointer; color:#64748b; display:flex;">${editSvg}</button>
           <button class="folder-action-btn delete-f-btn" title="Delete Folder" style="background:none; border:none; padding:3px; cursor:pointer; color:#ef4444; display:flex;">${trashSvg}</button>
@@ -1082,6 +1431,14 @@ function renderSidebar() {
       e.stopPropagation();
       showFolderContextMenu(e.clientX, e.clientY, folderName);
     };
+
+    const pasteInFolderBtn = folderHeader.querySelector('.folder-paste-btn');
+    if (pasteInFolderBtn) {
+      pasteInFolderBtn.onclick = (e) => {
+        e.stopPropagation();
+        handleClipboardPaste(folderName);
+      };
+    }
 
     const renameBtn = folderHeader.querySelector('.rename-f-btn');
     if (renameBtn) {
@@ -1184,7 +1541,34 @@ function displayArticle(id) {
   articleContent.classList.remove('hidden');
 
   articleTitle.innerText = article.title;
-  articleDate.innerText = `Extracted: ${article.extractedAt}`;
+
+  const isFetched = article.fetched !== false && !!article.markdown;
+  articleDate.innerText = isFetched ? `Extracted: ${article.extractedAt || 'Unknown'}` : `Status: Pending Import`;
+
+  if (!isFetched) {
+    articleBody.innerHTML = `
+      <div style="text-align: center; padding: 60px 20px; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 12px; margin-top: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
+        <div style="font-size: 3.5rem; margin-bottom: 14px;">📄</div>
+        <h2 style="font-size: 1.4rem; color: #0f172a; margin-bottom: 10px; font-weight: 700;">Article Pending Import</h2>
+        <p style="color: #64748b; font-size: 0.95rem; max-width: 520px; margin: 0 auto 24px auto; line-height: 1.5;">
+          This article is indexed in your <strong>${article.folderName || 'Uncategorized'}</strong> medical folder, but its content has not been fetched yet.
+        </p>
+        <button id="pending-import-paste-btn" class="btn primary-btn" style="padding: 12px 24px; font-size: 1rem; background: #2563eb; border-color: #1d4ed8; font-weight: 600;">
+          + Paste Markdown for "${article.title}"
+        </button>
+      </div>
+    `;
+
+    const pendingBtn = document.getElementById('pending-import-paste-btn');
+    if (pendingBtn) {
+      pendingBtn.onclick = () => handleClipboardPaste(article.folderName, article.id);
+    }
+
+    if (mediaSidebar) mediaSidebar.classList.add('hidden');
+    const toggleRightBtn = document.getElementById('toggle-right-sidebar-btn');
+    if (toggleRightBtn) toggleRightBtn.classList.add('hidden');
+    return;
+  }
 
   let cleanMd = article.markdown || '';
   const normTitle = article.title.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2213,8 +2597,9 @@ function deleteArticle(id) {
 
 // Clear All Articles
 async function handleClearAll() {
-  if (confirm('Are you sure you want to delete all saved articles?')) {
+  if (confirm('Are you sure you want to delete all saved articles and folders?')) {
     articles = [];
+    folders = ['Uncategorized'];
     activeArticleId = null;
     await dbClear();
     renderSidebar();

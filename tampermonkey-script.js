@@ -559,11 +559,74 @@ ${markdownBody}
         }
     }
 
-    if (typeof GM_registerMenuCommand !== 'undefined') {
-        GM_registerMenuCommand('Copy Clean Markdown', doCopyMarkdown);
+    // ─── Site Tree Extractor Handler ─────────────────────────────────────────
+    function doCopySiteTree() {
+        const navContainer = document.querySelector('nav, aside, [class*="sidebar"], [class*="tree"]') || document.body;
+        const candidates = Array.from(navContainer.querySelectorAll('button, a, div[class*="whitespace-nowrap"], div[class*="flex flex-row"], div[role="button"], li'));
+
+        const folders = [];
+        const foldersSet = new Set(["Uncategorized"]);
+        const articles = [];
+        const seenTitles = new Set();
+        let currentFolder = "Uncategorized";
+        let articleCount = 0;
+
+        candidates.forEach(el => {
+            const span = el.querySelector('span') || el;
+            const text = (span.innerText || span.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+            if (!text || text.length > 150 || text.includes('\n')) return;
+            if (["collapse all", "expand all", "home", "library", "search", "settings"].includes(text.toLowerCase())) return;
+
+            const html = el.outerHTML ? el.outerHTML.toLowerCase() : '';
+            const svg = el.querySelector('svg');
+            const dataIcon = svg ? (svg.getAttribute('data-icon') || '').toLowerCase() : '';
+
+            const isFolder = dataIcon.includes('folder') || html.includes('fa-folder') || (html.includes('folder') && !html.includes('newspaper') && !html.includes('file'));
+            const isArticle = dataIcon.includes('newspaper') || dataIcon.includes('file') || html.includes('fa-newspaper') || html.includes('newspaper');
+
+            if (isFolder) {
+                currentFolder = text;
+                if (!foldersSet.has(text)) {
+                    folders.push(text);
+                    foldersSet.add(text);
+                }
+            } else if (isArticle) {
+                const norm = text.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (norm && !seenTitles.has(norm)) {
+                    seenTitles.add(norm);
+                    articleCount++;
+                    articles.push({
+                        id: `master-${String(articleCount).padStart(4, '0')}`,
+                        title: text,
+                        folderName: currentFolder,
+                        fetched: false,
+                        markdown: null
+                    });
+                }
+            }
+        });
+
+        let outputStr = '';
+        if (articles.length > 0) {
+            outputStr = JSON.stringify({ folders: ["Uncategorized", ...folders], articles }, null, 2);
+        } else {
+            outputStr = navContainer ? navContainer.outerHTML : document.body.outerHTML;
+        }
+
+        if (typeof GM_setClipboard !== 'undefined') {
+            GM_setClipboard(outputStr);
+        } else {
+            navigator.clipboard.writeText(outputStr);
+        }
+        alert(`✓ Extracted ${folders.length} folder(s) and ${articles.length} article(s)!\nData copied to clipboard.\nPaste into Medical Library "Import Site Tree" modal.`);
     }
 
-    // ─── Inject Button Unconditionally ───────────────────────────────────────
+    if (typeof GM_registerMenuCommand !== 'undefined') {
+        GM_registerMenuCommand('Copy Clean Markdown', doCopyMarkdown);
+        GM_registerMenuCommand('Copy Site Navigation Tree HTML', doCopySiteTree);
+    }
+
+    // ─── Inject Floating Buttons ──────────────────────────────────────────────
     function injectButton() {
         if (document.getElementById('coursology-extract-btn')) return;
         if (!document.body) return;
@@ -593,9 +656,36 @@ ${markdownBody}
             visibility: visible !important;
             opacity: 1 !important;
         `;
-
         btn.onclick = doCopyMarkdown;
         document.body.appendChild(btn);
+
+        const treeBtn = document.createElement('button');
+        treeBtn.id = 'coursology-tree-btn';
+        treeBtn.innerHTML = `Copy Tree HTML`;
+        treeBtn.style.cssText = `
+            position: fixed !important;
+            top: 15px !important;
+            left: 150px !important;
+            z-index: 2147483647 !important;
+            padding: 6px 12px !important;
+            background: #166534 !important;
+            color: #FFFFFF !important;
+            font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            border: 1px solid rgba(255,255,255,0.8) !important;
+            border-radius: 6px !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25) !important;
+            text-align: center !important;
+            line-height: 1.2 !important;
+            pointer-events: auto !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        `;
+        treeBtn.onclick = doCopySiteTree;
+        document.body.appendChild(treeBtn);
     }
 
     setInterval(injectButton, 1000);
