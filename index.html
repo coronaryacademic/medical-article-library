@@ -61,6 +61,19 @@
         <input type="text" id="search-input" placeholder="Search articles...">
       </div>
 
+      <div class="folder-global-controls" style="display: flex; gap: 8px; margin: 8px 0;">
+        <button id="expand-all-folders-btn" class="btn text-btn" style="flex: 1; padding: 7px 8px; font-size: 0.78rem; font-weight: 600; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 5px;" title="Expand all folder accordions">
+          <svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          <span>Expand All</span>
+        </button>
+        <button id="collapse-all-folders-btn" class="btn text-btn" style="flex: 1; padding: 7px 8px; font-size: 0.78rem; font-weight: 600; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 5px;" title="Collapse all folder accordions">
+          <svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px;"><path d="M19 13H5v-2h14v2z"/></svg>
+          <span>Collapse All</span>
+        </button>
+      </div>
+
+      <div id="tag-filter-bar" class="tag-filter-bar" style="display:none;"></div>
+
       <div class="article-list-container">
         <ul id="article-flat-list" class="article-flat-list"></ul>
       </div>
@@ -95,7 +108,13 @@
           <div class="article-meta-row">
             <span id="article-date">Extracted: --</span>
             
-            <div class="article-toolbar">
+            <div class="article-toolbar" style="display: flex; align-items: center; gap: 8px;">
+              <div class="font-size-controls" style="display: inline-flex; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff;">
+                <button id="font-decrease-btn" class="btn toolbar-btn" style="border: none; border-right: 1px solid #e2e8f0; padding: 4px 9px; font-weight: 700; font-size: 0.82rem; background: #ffffff;" title="Decrease Text Size">A-</button>
+                <span id="font-size-display" style="font-size: 0.78rem; font-weight: 600; padding: 0 8px; color: #475569; user-select: none;">100%</span>
+                <button id="font-increase-btn" class="btn toolbar-btn" style="border: none; border-left: 1px solid #e2e8f0; padding: 4px 9px; font-weight: 700; font-size: 0.82rem; background: #ffffff;" title="Increase Text Size">A+</button>
+              </div>
+
               <button id="article-collapse-all-btn" class="btn toolbar-btn" title="Collapse all article sections">
                 <svg class="svg-icon-sm" viewBox="0 0 448 512" fill="currentColor"><path d="M432 256c0 17.7-14.3 32-32 32L48 288c-17.7 0-32-14.3-32-32s14.3-32 32-32l352 0c17.7 0 32 14.3 32 32z"/></svg>
                 <span>Collapse All</span>
@@ -148,7 +167,9 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <div class="lb-sep"></div>
-          <button id="lightbox-close-btn" class="lb-close-btn" title="Close">
+          <button id="lightbox-min-btn" class="win-btn win-min" title="Minimize">—</button>
+          <button id="lightbox-max-btn" class="win-btn win-max" title="Maximize / Restore">❐</button>
+          <button id="lightbox-close-btn" class="lb-close-btn win-btn win-close" title="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -168,6 +189,9 @@
         </button>
         <button id="tool-open-tab" class="lb-tool-btn" title="Open Image in New Tab">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>
+        <button id="tool-copy-img" class="lb-tool-btn" title="Copy Image to Clipboard (Paste & Share with Friends)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
         </button>
       </div>
 
@@ -201,6 +225,7 @@
           <span id="table-lightbox-title" class="window-title-text">Table Viewer</span>
         </div>
         <div class="window-controls">
+          <button id="open-table-tab-btn" class="win-btn" title="Open Table in New Tab" style="font-size: 0.8rem; padding: 0 6px;">↗</button>
           <button id="table-min-btn" class="win-btn win-min" title="Minimize">—</button>
           <button id="table-max-btn" class="win-btn win-max" title="Maximize / Restore">❐</button>
           <button id="table-lightbox-close" class="win-btn win-close" title="Close">&times;</button>

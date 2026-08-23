@@ -80,6 +80,19 @@ let activeTocCollapsed = false; // Tracks if active article TOC is collapsed in 
 let currentFigureList = []; // Array of { src, caption, element, alt, index }
 let currentFigureIndex = 0;
 
+let articleFontSizePercent = parseInt(localStorage.getItem('article_font_size') || '100');
+
+function updateArticleFontSize() {
+  const articleBody = document.getElementById('article-body');
+  const display = document.getElementById('font-size-display');
+  if (articleBody) {
+    articleBody.style.fontSize = `${(1.02 * articleFontSizePercent) / 100}rem`;
+  }
+  if (display) {
+    display.innerText = `${articleFontSizePercent}%`;
+  }
+}
+
 // Local Media Blob Store & Folder Collapse State
 const localBlobStore = new Map();
 const folderCollapseState = new Set();
@@ -460,6 +473,7 @@ async function init() {
 }
 
 let activeFilterTab = 'all'; // 'all', 'fetched', 'pending'
+let activeTagFilters = new Set(); // empty = no filter, else Set of tag strings (OR logic)
 
 // Load articles from IndexedDB (migrates from localStorage on first upgrade)
 async function loadArticles() {
@@ -585,16 +599,80 @@ function setupEventListeners() {
     });
   }
 
-  if (articleCollapseAllBtn) articleCollapseAllBtn.addEventListener('click', collapseAllArticleSections);
-  if (articleExpandAllBtn) articleExpandAllBtn.addEventListener('click', expandAllArticleSections);
+  if (treeModal) {
+    treeModal.addEventListener('click', (e) => {
+      if (shouldCloseModalOnBackdropClick(e, treeModal)) hideTreeModal();
+    });
+  }
 
   const scriptModalBtn = document.getElementById('script-modal-btn');
   const scriptModalClose = document.getElementById('script-modal-close');
   const copyScriptCodeBtn = document.getElementById('copy-script-code-btn');
+  const scriptModal = document.getElementById('script-modal');
 
   if (scriptModalBtn) scriptModalBtn.addEventListener('click', openScriptModal);
   if (scriptModalClose) scriptModalClose.addEventListener('click', closeScriptModal);
   if (copyScriptCodeBtn) copyScriptCodeBtn.addEventListener('click', copyScriptCode);
+  if (scriptModal) {
+    scriptModal.addEventListener('click', (e) => {
+      if (shouldCloseModalOnBackdropClick(e, scriptModal)) closeScriptModal();
+    });
+  }
+
+  const expandAllFoldersBtn = document.getElementById('expand-all-folders-btn');
+  const collapseAllFoldersBtn = document.getElementById('collapse-all-folders-btn');
+  const fontDecBtn = document.getElementById('font-decrease-btn');
+  const fontIncBtn = document.getElementById('font-increase-btn');
+
+  if (expandAllFoldersBtn) {
+    expandAllFoldersBtn.addEventListener('click', () => {
+      folderCollapseState.clear();
+      renderSidebar();
+    });
+  }
+
+  if (collapseAllFoldersBtn) {
+    collapseAllFoldersBtn.addEventListener('click', () => {
+      folders.forEach(f => folderCollapseState.add(f));
+      folderCollapseState.add('⭐ Bookmarks');
+      renderSidebar();
+    });
+  }
+
+  if (fontDecBtn) {
+    fontDecBtn.addEventListener('click', () => {
+      articleFontSizePercent = Math.max(80, articleFontSizePercent - 10);
+      updateArticleFontSize();
+      localStorage.setItem('article_font_size', articleFontSizePercent.toString());
+    });
+  }
+
+  if (fontIncBtn) {
+    fontIncBtn.addEventListener('click', () => {
+      articleFontSizePercent = Math.min(160, articleFontSizePercent + 10);
+      updateArticleFontSize();
+      localStorage.setItem('article_font_size', articleFontSizePercent.toString());
+    });
+  }
+
+  const articleCollapseAllBtn = document.getElementById('article-collapse-all-btn');
+  const articleExpandAllBtn = document.getElementById('article-expand-all-btn');
+
+  if (articleCollapseAllBtn) {
+    articleCollapseAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.collapsible-heading').forEach(h => h.classList.add('collapsed'));
+      document.querySelectorAll('.h1-section-body').forEach(b => b.classList.add('collapsed'));
+    });
+  }
+
+  if (articleExpandAllBtn) {
+    articleExpandAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.collapsible-heading').forEach(h => h.classList.remove('collapsed'));
+      document.querySelectorAll('.h1-section-body').forEach(b => b.classList.remove('collapsed'));
+    });
+  }
+
+  document.querySelectorAll('.modal-card, .lightbox-card').forEach(enableCornerResize);
 
   const lightboxCloseBtn = document.getElementById('lightbox-close-btn');
   if (lightboxCloseBtn) lightboxCloseBtn.addEventListener('click', closeLightbox);
@@ -603,7 +681,7 @@ function setupEventListeners() {
 
   if (lightbox) {
     lightbox.addEventListener('click', (e) => {
-      if (e.target === lightbox) closeLightbox();
+      if (shouldCloseModalOnBackdropClick(e, lightbox)) closeLightbox();
     });
   }
 
@@ -612,7 +690,7 @@ function setupEventListeners() {
   if (tableLightboxClose) tableLightboxClose.addEventListener('click', closeTableLightbox);
   if (tableLightboxModal) {
     tableLightboxModal.addEventListener('click', (e) => {
-      if (e.target === tableLightboxModal) closeTableLightbox();
+      if (shouldCloseModalOnBackdropClick(e, tableLightboxModal)) closeTableLightbox();
     });
   }
 
@@ -684,6 +762,16 @@ function setupSidebarResizingAndToggles() {
     });
   }
 
+  // Load & Apply Saved Sidebar Width from LocalStorage
+  const savedSidebarWidth = localStorage.getItem('sidebar_width');
+  if (savedSidebarWidth && leftSidebar) {
+    const w = parseInt(savedSidebarWidth);
+    if (w >= 180 && w <= 750) {
+      leftSidebar.style.width = `${w}px`;
+      if (toggleLeftBtn) toggleLeftBtn.style.left = `${w - 14}px`;
+    }
+  }
+
   // Left Resizer Dragging
   if (leftResizer && leftSidebar && toggleLeftBtn) {
     let isDragging = false;
@@ -698,9 +786,9 @@ function setupSidebarResizingAndToggles() {
       if (!isDragging) return;
       let newWidth = e.clientX;
       if (newWidth < 180) newWidth = 180;
-      if (newWidth > 500) newWidth = 500;
+      if (newWidth > 750) newWidth = 750;
       leftSidebar.style.width = `${newWidth}px`;
-      toggleLeftBtn.style.left = `${newWidth - 16}px`;
+      toggleLeftBtn.style.left = `${newWidth - 14}px`;
     });
 
     document.addEventListener('mouseup', () => {
@@ -708,6 +796,8 @@ function setupSidebarResizingAndToggles() {
         isDragging = false;
         leftResizer.classList.remove('resizing');
         document.body.style.cursor = '';
+        const currentW = parseInt(leftSidebar.style.width);
+        if (currentW) localStorage.setItem('sidebar_width', currentW.toString());
       }
     });
   }
@@ -1202,12 +1292,18 @@ function createArticleListItem(article) {
     rightBox.appendChild(quickPasteBtn);
   }
 
-  const bookmarkIcon = document.createElement('span');
-  bookmarkIcon.style.display = 'flex';
-  bookmarkIcon.style.alignItems = 'center';
-  bookmarkIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" style="width:16px; height:16px; display:block; cursor:pointer;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
-  bookmarkIcon.title = 'Bookmark article';
-  rightBox.appendChild(bookmarkIcon);
+  const isBookmarked = !!article.bookmarked;
+  const bookmarkBtn = document.createElement('button');
+  bookmarkBtn.className = 'bookmark-btn' + (isBookmarked ? ' is-bookmarked' : '');
+  bookmarkBtn.title = isBookmarked ? 'Remove Bookmark' : 'Bookmark Article';
+  bookmarkBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="${isBookmarked ? '#f59e0b' : 'none'}" stroke="${isBookmarked ? '#f59e0b' : '#64748b'}" stroke-width="1.8" style="width:16px; height:16px; display:block; cursor:pointer;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+  bookmarkBtn.onclick = async (e) => {
+    e.stopPropagation();
+    article.bookmarked = !article.bookmarked;
+    await saveArticles(article);
+    renderSidebar();
+  };
+  rightBox.appendChild(bookmarkBtn);
 
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'delete-item';
@@ -1311,6 +1407,74 @@ function createArticleListItem(article) {
 }
 
 // Render Clean Sidebar Folder List & Article Tree
+// Extract tags array from article — frontmatter > valid persisted > nothing
+function getArticleTags(article) {
+  // 1. YAML frontmatter is the most reliable source (parsed at extract time)
+  if (article.markdown) {
+    const tags = [];
+    const fmMatch = article.markdown.match(/^---\n([\s\S]*?)\n---/);
+    if (fmMatch) {
+      fmMatch[1].replace(/- "([^"]+)"/g, (_, t) => tags.push(t));
+    }
+    if (tags.length > 0) return tags;
+  }
+  // 2. Persisted .tags array — only trust if tags look valid (not concatenated garbage)
+  if (Array.isArray(article.tags) && article.tags.length > 0) {
+    const valid = article.tags.filter(t => typeof t === 'string' && t.length > 0 && t.length <= 50);
+    if (valid.length === article.tags.length) return article.tags;
+    // Bad data — clear it so next open re-extracts correctly
+    article.tags = [];
+    dbPut(article);
+  }
+  return [];
+}
+
+// Collect all unique tags across all fetched articles
+function getAllUniqueTags() {
+  const tagSet = new Set();
+  articles.forEach(a => getArticleTags(a).forEach(t => tagSet.add(t)));
+  return [...tagSet].sort();
+}
+
+// Render the tag filter chip bar in the sidebar
+function renderTagFilterBar() {
+  const bar = document.getElementById('tag-filter-bar');
+  if (!bar) return;
+
+  const allTags = getAllUniqueTags();
+  if (allTags.length === 0) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  bar.innerHTML = '';
+
+  // "All" chip to clear all filters
+  const allChip = document.createElement('button');
+  allChip.className = 'tag-filter-chip' + (activeTagFilters.size === 0 ? ' active' : '');
+  allChip.textContent = 'All';
+  allChip.onclick = () => { activeTagFilters.clear(); renderTagFilterBar(); renderSidebar(); };
+  bar.appendChild(allChip);
+
+  allTags.forEach(tag => {
+    const chip = document.createElement('button');
+    chip.className = 'tag-filter-chip' + (activeTagFilters.has(tag) ? ' active' : '');
+    chip.textContent = tag;
+    chip.onclick = () => {
+      if (activeTagFilters.has(tag)) {
+        activeTagFilters.delete(tag);
+      } else {
+        activeTagFilters.add(tag);
+      }
+      renderTagFilterBar();
+      renderSidebar();
+    };
+    bar.appendChild(chip);
+  });
+}
+
 function renderSidebar() {
   const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
   articleFlatList.innerHTML = '';
@@ -1326,6 +1490,16 @@ function renderSidebar() {
   } else if (activeFilterTab === 'pending') {
     filtered = filtered.filter(a => a.fetched === false || !a.markdown);
   }
+
+  // Tag filter — OR logic: show articles that have ANY of the selected tags
+  if (activeTagFilters.size > 0) {
+    filtered = filtered.filter(a => {
+      const artTags = getArticleTags(a);
+      return [...activeTagFilters].some(t => artTags.includes(t));
+    });
+  }
+
+  renderTagFilterBar();
 
   const totalArticles = articles.length;
   const fetchedArticles = articles.filter(a => a.fetched !== false && !!a.markdown).length;
@@ -1368,6 +1542,52 @@ function renderSidebar() {
   const editSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
   const trashSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:14px; height:14px;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
   const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px; height:14px;"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+
+  // Render pinned Bookmarks folder if bookmarked articles exist
+  const bookmarkedArts = articles.filter(a => a.bookmarked);
+  if (bookmarkedArts.length > 0 && !query) {
+    const bmFolderName = '⭐ Bookmarks';
+    const isBmCollapsed = folderCollapseState.has(bmFolderName);
+
+    const bmCard = document.createElement('div');
+    bmCard.className = 'sidebar-folder-card' + (isBmCollapsed ? ' collapsed' : '');
+    bmCard.style.borderLeft = '3px solid #f59e0b';
+    bmCard.style.marginBottom = '10px';
+
+    const bmHeader = document.createElement('div');
+    bmHeader.className = 'sidebar-folder-header';
+    bmHeader.style.background = '#fffbeb';
+    bmHeader.innerHTML = `
+      <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1.1rem; line-height:1;">⭐</span>
+        <span style="font-weight:700; font-size:0.92rem; color:#b45309;">Bookmarks</span>
+        <span class="folder-count-badge" style="background:#fef3c7; color:#b45309;">${bookmarkedArts.length}</span>
+      </div>
+      <div class="folder-actions" style="display:flex; align-items:center; gap:6px;">
+        <span style="display:flex; align-items:center; color:#d97706; transition:transform 0.2s ease; transform: ${isBmCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};">${chevronSvg}</span>
+      </div>
+    `;
+
+    bmHeader.onclick = () => {
+      if (folderCollapseState.has(bmFolderName)) {
+        folderCollapseState.delete(bmFolderName);
+      } else {
+        folderCollapseState.add(bmFolderName);
+      }
+      renderSidebar();
+    };
+
+    const bmUl = document.createElement('ul');
+    bmUl.className = 'folder-article-list' + (isBmCollapsed ? ' hidden' : '');
+
+    bookmarkedArts.forEach(art => {
+      bmUl.appendChild(createArticleListItem(art));
+    });
+
+    bmCard.appendChild(bmHeader);
+    bmCard.appendChild(bmUl);
+    articleFlatList.appendChild(bmCard);
+  }
 
   folders.forEach(folderName => {
     const groupArticles = filtered.filter(a => (a.folderName || 'Uncategorized') === folderName);
@@ -1572,19 +1792,39 @@ function displayArticle(id) {
 
   let cleanMd = article.markdown || '';
   const normTitle = article.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
+
+  // Strip YAML frontmatter and extract tags from it
+  let frontmatterTags = [];
+  cleanMd = cleanMd.replace(/^---\n([\s\S]*?)\n---\n?/, (_, fm) => {
+    // Simple global scan: find every  - "tag name"  line anywhere in the frontmatter
+    fm.replace(/^\s*-\s+"([^"]+)"/gm, (__, tag) => frontmatterTags.push(tag));
+    return '';
+  });
+
   // Remove leading `# Title` matching article title to prevent duplication
   cleanMd = cleanMd.replace(/^\s*#+\s+([^\n]+)/, (full, hText) => {
     const normH = hText.toLowerCase().replace(/[^a-z0-9]/g, '');
     return (normH === normTitle) ? '' : full;
   }).trim();
 
-  // Parse Markdown to HTML using Marked library
-  if (typeof marked !== 'undefined') {
+  // Parse Markdown or restore saved HTML highlights
+  if (article.html && article.html.trim().length > 0) {
+    articleBody.innerHTML = article.html;
+  } else if (typeof marked !== 'undefined') {
     articleBody.innerHTML = marked.parse(cleanMd);
   } else {
     articleBody.innerText = cleanMd;
   }
+
+  // Re-bind removal handlers to all restored text highlights
+  articleBody.querySelectorAll('mark.yellow-highlight').forEach(mark => {
+    mark.onclick = (e) => {
+      e.stopPropagation();
+      const text = mark.innerText;
+      mark.replaceWith(text);
+      saveCurrentArticleHighlights();
+    };
+  });
 
   // Resolve localBlobStore URLs and attach automatic CDN fallback handler
   articleBody.querySelectorAll('img, video').forEach(el => {
@@ -1624,9 +1864,105 @@ function displayArticle(id) {
   // 5. Convert exhibit text refs into pill buttons (uses gallery built above)
   processFigureAndTableLinks(articleBody);
 
-  // 6. Render Sidebar & Right Media Sidebar
+  // 6. Tags bar — always render with proper CSS classes
+  let domExtractedTags = [];
+
+  // Strategy A: new tampermonkey format — <p data-tag="true"> inside .article-tags-wrapper
+  const existingWrapper = articleBody.querySelector('.article-tags-wrapper');
+  if (existingWrapper) {
+    existingWrapper.querySelectorAll('[data-tag="true"], .tag-pill').forEach(el => {
+      const t = el.innerText.trim();
+      if (t && t.length <= 60 && t.toUpperCase() !== 'TAGS') domExtractedTags.push(t);
+    });
+    existingWrapper.remove();
+  }
+
+  // Strategy B: turndown converts <p data-tag="true"> blocks — find them anywhere in body
+  if (domExtractedTags.length === 0) {
+    articleBody.querySelectorAll('[data-tag="true"]').forEach(el => {
+      const t = el.innerText.trim();
+      if (t && t.length <= 60) domExtractedTags.push(t);
+      el.remove();
+    });
+  }
+
+  // Strategy C: TAGS heading followed by short sibling paragraphs
+  // Handles: turndown converts site's block-level pill divs to separate markdown paragraphs
+  if (domExtractedTags.length === 0) {
+    const allEls = Array.from(articleBody.children);
+    let tagsHeadingIdx = -1;
+    for (let i = 0; i < allEls.length; i++) {
+      const el = allEls[i];
+      const tag = el.tagName;
+      const txt = el.innerText ? el.innerText.trim() : '';
+      if (/^H[1-6]$/.test(tag) && txt.toUpperCase() === 'TAGS') {
+        tagsHeadingIdx = i;
+        break;
+      }
+    }
+    if (tagsHeadingIdx >= 0) {
+      // Collect following siblings that are short paragraphs (tag names, not article content)
+      const toRemove = [allEls[tagsHeadingIdx]];
+      for (let i = tagsHeadingIdx + 1; i < allEls.length; i++) {
+        const sib = allEls[i];
+        const txt = sib.innerText ? sib.innerText.trim() : '';
+        // Stop if we hit another heading or a long paragraph (real content)
+        if (/^H[1-6]$/.test(sib.tagName) || txt.length > 60 || txt.length === 0) break;
+        domExtractedTags.push(txt);
+        toRemove.push(sib);
+      }
+      toRemove.forEach(el => el.remove());
+    }
+  }
+
+  // Strategy D: stray "TAGS:" paragraph with inline text (old format) — remove it but don't try to parse
+  if (domExtractedTags.length === 0) {
+    articleBody.querySelectorAll('p, div').forEach(el => {
+      const txt = el.innerText ? el.innerText.trim() : '';
+      if (/^TAGS[:.]?\s/i.test(txt) && el.children.length <= 3) {
+        el.querySelectorAll('span, p').forEach(s => {
+          const t = s.innerText.trim();
+          if (t && t.toUpperCase() !== 'TAGS' && t.length <= 60) domExtractedTags.push(t);
+        });
+        el.remove();
+      }
+    });
+  }
+
+  // Final: determine tag list (frontmatter > DOM > cached valid)
+  const validDomTags = domExtractedTags.filter(t => t.length > 0 && t.length <= 60);
+  const tagsToRender = frontmatterTags.length > 0 ? frontmatterTags
+    : validDomTags.length > 0 ? validDomTags
+    : (Array.isArray(article.tags) ? article.tags.filter(t => t && t.length > 0 && t.length <= 60) : []);
+
+  // Persist valid tags to IndexedDB, clear bad cached data
+  if (tagsToRender.length > 0 && tagsToRender.every(t => t.length <= 60)) {
+    if (JSON.stringify(article.tags) !== JSON.stringify(tagsToRender)) {
+      article.tags = tagsToRender;
+      dbPut(article);
+    }
+  } else if (Array.isArray(article.tags) && article.tags.some(t => t.length > 60)) {
+    article.tags = [];
+    dbPut(article);
+  }
+
+  // Step E: render the styled tag bar
+  if (tagsToRender.length > 0) {
+    const tagsWrapper = document.createElement('div');
+    tagsWrapper.className = 'article-tags-wrapper';
+    tagsWrapper.innerHTML = `
+      <div class="article-tags-label">Tags</div>
+      <div class="article-tags-pills">${tagsToRender.map(t =>
+        `<span class="tag-pill">${t}</span>`
+      ).join('')}</div>
+    `;
+    articleBody.appendChild(tagsWrapper);
+  }
+
+  // 7. Render Sidebar & Right Media Sidebar
   renderSidebar();
   renderMediaSidebar(articleBody);
+  updateArticleFontSize();
 }
 
 // Ensure first section has an "Introduction" heading if missing
@@ -1937,6 +2273,16 @@ function setupLightboxGallery(container, defaultTitle) {
 
 // Convert "(Figure X)" / "(Table X)" text references into sleek Coursology Exhibit Pill Buttons
 function processFigureAndTableLinks(container) {
+  if (!container) return;
+
+  // 0. Clean up any pre-existing or nested exhibit buttons to prevent duplication e.g. (🖼 (🖼 Figure 1))))
+  container.querySelectorAll('.exhibit-btn').forEach(btn => {
+    const label = btn.querySelector('.ex-label')?.innerText || btn.innerText.replace(/[\(\)🖼\s]+/g, ' ').trim();
+    if (label) {
+      btn.replaceWith(document.createTextNode(`(${label})`));
+    }
+  });
+
   const figureMap = {};
 
   // 1. Build map for figure images — with separate counters for videos vs figures
@@ -2015,14 +2361,11 @@ function processFigureAndTableLinks(container) {
     NodeFilter.SHOW_TEXT,
     {
       acceptNode: function(node) {
-        const parent = node.parentNode;
-        if (!parent) return NodeFilter.FILTER_SKIP;
-        const tag = parent.tagName.toUpperCase();
+        const parent = node.parentElement || node.parentNode;
+        if (!parent || !parent.closest) return NodeFilter.FILTER_SKIP;
 
-        if (['SCRIPT', 'STYLE', 'A', 'CODE', 'PRE', 'BUTTON', 'FIGCAPTION'].includes(tag)) {
-          return NodeFilter.FILTER_REJECT;
-        }
-        if (parent.classList && (parent.classList.contains('figure-link') || parent.classList.contains('exhibit-btn'))) {
+        // Strictly reject any node inside an existing button, exhibit button, figure link, or script/style tag
+        if (parent.closest('button, .exhibit-btn, .figure-link, a, script, style, code, pre, figcaption')) {
           return NodeFilter.FILTER_REJECT;
         }
         if (/(?:Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit|Video|Vid\.?)\s*\d+/i.test(node.nodeValue)) {
@@ -2136,7 +2479,7 @@ function processFigureAndTableLinks(container) {
 // Open Image in Clean Viewer Tab
 function openImageInNewTab(imgUrl) {
   if (!imgUrl) return;
-  const newTab = window.open('');
+  const newTab = window.open('about:blank', '_blank');
   if (newTab) {
     newTab.document.write(`
       <!DOCTYPE html>
@@ -2157,6 +2500,104 @@ function openImageInNewTab(imgUrl) {
   }
 }
 
+// Open Table in Clean Formatted Viewer Tab
+function openTableInNewTab(tableHtml, title = 'Medical Table') {
+  if (!tableHtml) return;
+  const newTab = window.open('about:blank', '_blank');
+  if (newTab) {
+    newTab.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <meta charset="utf-8" />
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            margin: 0;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          h2 { margin-bottom: 20px; color: #1e293b; text-align: center; }
+          .table-container {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            max-width: 95vw;
+            overflow-x: auto;
+            border: 1px solid #cbd5e1;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.95rem;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 10px 14px;
+            text-align: left;
+          }
+          th {
+            background-color: #f1f5f9;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          tr:nth-child(even) {
+            background-color: #f8fafc;
+          }
+        </style>
+      </head>
+      <body>
+        <h2>${title}</h2>
+        <div class="table-container">
+          ${tableHtml}
+        </div>
+      </body>
+      </html>
+    `);
+    newTab.document.close();
+  }
+}
+
+// Copy Image to System Clipboard
+async function copyImageToClipboard(imgSrc) {
+  if (!imgSrc) return;
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = imgSrc;
+    await img.decode();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        alert('Could not process image for clipboard.');
+        return;
+      }
+      try {
+        const item = new ClipboardItem({ 'image/png': blob });
+        await navigator.clipboard.write([item]);
+        alert('✓ Image copied to clipboard! You can paste it directly to friends.');
+      } catch (err) {
+        await navigator.clipboard.writeText(canvas.toDataURL('image/png'));
+        alert('✓ Image link copied to clipboard!');
+      }
+    }, 'image/png');
+  } catch (e) {
+    alert('Copy Image: ' + e.message);
+  }
+}
+
 // Persistent Auto Text Highlighter (Bright Yellow)
 function setupTextHighlighter() {
   const articleBody = document.getElementById('article-body');
@@ -2174,13 +2615,17 @@ function setupTextHighlighter() {
 
     if (!articleBody.contains(container)) return;
 
+    // Do NOT wrap or disturb exhibit buttons, SVG icons, or figure links
+    const startNode = range.startContainer.parentElement;
+    const endNode = range.endContainer.parentElement;
+    if (startNode && startNode.closest('.exhibit-btn, button, .figure-link')) return;
+    if (endNode && endNode.closest('.exhibit-btn, button, .figure-link')) return;
+
+    const cloned = range.cloneContents();
+    if (cloned.querySelector('.exhibit-btn, button, .figure-link, svg')) return;
+
     const mark = document.createElement('mark');
     mark.className = 'yellow-highlight';
-    mark.style.backgroundColor = '#fef08a';
-    mark.style.color = '#1e293b';
-    mark.style.fontWeight = '600';
-    mark.style.padding = '1px 4px';
-    mark.style.borderRadius = '3px';
     mark.title = 'Click to remove highlight';
 
     try {
@@ -2220,15 +2665,47 @@ function setupPanAndZoom() {
   const zoomResetBtn = document.getElementById('tool-zoom-reset');
   const rotateBtn = document.getElementById('tool-rotate');
   const openTabBtn = document.getElementById('tool-open-tab');
+  const copyImgBtn = document.getElementById('tool-copy-img');
 
   if (zoomInBtn) zoomInBtn.addEventListener('click', () => { imgZoom += 0.25; updateImageTransform(); });
   if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => { imgZoom = Math.max(0.3, imgZoom - 0.25); updateImageTransform(); });
   if (zoomResetBtn) zoomResetBtn.addEventListener('click', resetImageTransform);
   if (rotateBtn) rotateBtn.addEventListener('click', () => { imgRotation = (imgRotation + 90) % 360; updateImageTransform(); });
+  
   if (openTabBtn) {
     openTabBtn.addEventListener('click', () => {
+      const item = (currentFigureList && currentFigureIndex >= 0) ? currentFigureList[currentFigureIndex] : null;
+      if (item && item.isTable) {
+        const tblElem = document.getElementById('lb-table-viewport')?.querySelector('table') || item.element;
+        if (tblElem) {
+          openTableInNewTab(tblElem.outerHTML, item.caption || 'Medical Table');
+          return;
+        }
+      }
+      const standTableContent = document.getElementById('table-lightbox-content');
+      const tableModal = document.getElementById('table-lightbox');
+      if (tableModal && !tableModal.classList.contains('hidden') && standTableContent) {
+        const tbl = standTableContent.querySelector('table');
+        if (tbl) {
+          const title = document.getElementById('table-lightbox-title')?.innerText || 'Medical Table';
+          openTableInNewTab(tbl.outerHTML, title);
+          return;
+        }
+      }
+
       const src = lightboxImg ? lightboxImg.src : null;
       if (src) openImageInNewTab(src);
+    });
+  }
+
+  if (copyImgBtn) {
+    copyImgBtn.addEventListener('click', () => {
+      const src = lightboxImg ? lightboxImg.src : null;
+      if (src) {
+        copyImageToClipboard(src);
+      } else {
+        alert('No image to copy.');
+      }
     });
   }
 
@@ -2292,6 +2769,20 @@ function setupWindowControls() {
   const tblMax = document.getElementById('table-max-btn');
   const tblClose = document.getElementById('table-lightbox-close');
 
+  const openTableTabBtn = document.getElementById('open-table-tab-btn');
+  if (openTableTabBtn) {
+    openTableTabBtn.addEventListener('click', () => {
+      const standTableContent = document.getElementById('table-lightbox-content');
+      if (standTableContent) {
+        const tbl = standTableContent.querySelector('table');
+        if (tbl) {
+          const title = document.getElementById('table-lightbox-title')?.innerText || 'Medical Table';
+          openTableInNewTab(tbl.outerHTML, title);
+        }
+      }
+    });
+  }
+
   if (imgWindow && imgHeader) {
     makeWindowDraggableAndResizable(imgWindow, imgHeader, imgModal, imgMin, imgMax, imgClose, 'Exhibit Viewer');
   }
@@ -2301,7 +2792,102 @@ function setupWindowControls() {
   }
 }
 
+let globalMouseDownTarget = null;
+document.addEventListener('mousedown', (e) => {
+  globalMouseDownTarget = e.target;
+}, true);
+
+let isModalInteracting = false;
+let modalInteractEndTime = 0;
+
+function markModalInteractStart() {
+  isModalInteracting = true;
+  modalInteractEndTime = Date.now();
+  window._wasResizingModal = true;
+}
+
+function markModalInteractEnd() {
+  modalInteractEndTime = Date.now();
+  setTimeout(() => {
+    isModalInteracting = false;
+    window._wasResizingModal = false;
+  }, 450);
+}
+
+function wasModalRecentlyInteracted() {
+  return isModalInteracting || (Date.now() - modalInteractEndTime < 450);
+}
+
+function shouldCloseModalOnBackdropClick(e, backdropEl) {
+  if (!backdropEl) return false;
+  if (e.target !== backdropEl) return false;
+  if (globalMouseDownTarget !== backdropEl) return false;
+  if (wasModalRecentlyInteracted()) return false;
+  return true;
+}
+
+// Global capture phase event suppressor for modal backdrop clicks after drag/resize
+window.addEventListener('click', (e) => {
+  if (wasModalRecentlyInteracted()) {
+    if (e.target && (e.target.classList.contains('lightbox') || e.target.id === 'table-lightbox' || e.target.id === 'script-modal' || e.target.id === 'tree-import-modal')) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }
+}, true);
+
+function enableCornerResize(cardEl) {
+  if (!cardEl || cardEl._hasResizeHandle) return;
+  cardEl._hasResizeHandle = true;
+  cardEl.style.resize = 'both';
+  cardEl.style.overflow = 'auto';
+
+  let handle = cardEl.querySelector('.modal-resize-handle');
+  if (!handle) {
+    handle = document.createElement('div');
+    handle.className = 'modal-resize-handle';
+    handle.title = 'Drag corner to resize';
+    cardEl.appendChild(handle);
+  }
+
+  let isResizing = false;
+  let startW = 0, startH = 0, startX = 0, startY = 0;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isResizing = true;
+    markModalInteractStart();
+    startW = cardEl.offsetWidth;
+    startH = cardEl.offsetHeight;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    const onMouseMove = (ev) => {
+      if (!isResizing) return;
+      markModalInteractStart();
+      const newW = Math.max(280, startW + (ev.clientX - startX));
+      const newH = Math.max(160, startH + (ev.clientY - startY));
+      cardEl.style.width = newW + 'px';
+      cardEl.style.height = newH + 'px';
+    };
+
+    const onMouseUp = () => {
+      if (isResizing) {
+        isResizing = false;
+        markModalInteractEnd();
+      }
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
+}
+
 function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtnEl, maxBtnEl, closeBtnEl, defaultTitle) {
+  if (cardEl) enableCornerResize(cardEl);
   let isDragging = false;
   let startX = 0, startY = 0;
   let currentX = 0, currentY = 0;
@@ -2317,9 +2903,10 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
     headerEl.style.cursor = 'grab';
 
     const onDragStart = (e) => {
-      if (e.target.closest('.win-btn') || e.target.closest('.lb-close-btn') || e.target.closest('.lb-nav-btn')) return;
+      if (e.target.closest('.win-btn') || e.target.closest('.lb-close-btn') || e.target.closest('.lb-nav-btn') || e.target.closest('.modal-resize-handle')) return;
       if (cardEl.classList.contains('maximized')) return;
       isDragging = true;
+      markModalInteractStart();
       document.body.classList.add('dragging-active');
       headerEl.style.cursor = 'grabbing';
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -2331,6 +2918,7 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
     const onDragMove = (e) => {
       if (!isDragging) return;
       if (e.cancelable) e.preventDefault();
+      markModalInteractStart();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
       currentX = clientX - startX;
@@ -2342,6 +2930,7 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
     const onDragEnd = () => {
       if (isDragging) {
         isDragging = false;
+        markModalInteractEnd();
         document.body.classList.remove('dragging-active');
         if (window.getSelection) {
           window.getSelection().removeAllRanges();
@@ -2363,8 +2952,16 @@ function makeWindowDraggableAndResizable(cardEl, headerEl, modalParentEl, minBtn
   if (maxBtnEl) {
     maxBtnEl.addEventListener('click', (e) => {
       e.stopPropagation();
-      cardEl.classList.toggle('maximized');
-      if (!cardEl.classList.contains('maximized')) {
+      e.preventDefault();
+      const isMax = cardEl.classList.toggle('maximized');
+      if (isMax) {
+        cardEl._savedWidth = cardEl.style.width;
+        cardEl._savedHeight = cardEl.style.height;
+        cardEl.style.width = '';
+        cardEl.style.height = '';
+      } else {
+        if (cardEl._savedWidth) cardEl.style.width = cardEl._savedWidth;
+        if (cardEl._savedHeight) cardEl.style.height = cardEl._savedHeight;
         resetPos();
       }
     });
@@ -2578,12 +3175,17 @@ function showPrevFigure(e) {
 }
 
 // Delete Article
-function deleteArticle(id) {
+async function deleteArticle(id) {
   articles = articles.filter(a => a.id !== id);
+  try {
+    await dbDelete(id);
+  } catch (e) {
+    console.error('Failed to delete article from IndexedDB:', e);
+  }
   if (activeArticleId === id) {
     activeArticleId = articles.length > 0 ? articles[0].id : null;
   }
-  saveArticles();
+  renderSidebar();
   if (activeArticleId) {
     displayArticle(activeArticleId);
   } else {
