@@ -92,18 +92,27 @@
             turndownService.use(turndownPluginGfm.gfm);
         }
 
-        // Keep tables as clean raw HTML if not converted to images
-        turndownService.addRule('preserveTables', {
-            filter: ['table'],
-            replacement: function(content, node) {
-                const clone = node.cloneNode(true);
-                clone.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
-                if (node.getAttribute('data-exhibit-asset') === 'true' || node.style.display === 'none') {
-                    return clone.outerHTML;
-                }
-                return '\n\n' + clone.outerHTML + '\n\n';
-            }
-        });
+                        // Keep tables as clean raw HTML if not converted to images
+                            turndownService.addRule('preserveTables', {
+                                filter: ['table'],
+                                replacement: function(content, node) {
+                                    const clone = node.cloneNode(true);
+                                    clone.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
+                                    if (node.getAttribute('data-exhibit-asset') === 'true' || node.style.display === 'none') {
+                                        return clone.outerHTML;
+                                    }
+                                    return '\n\n' + clone.outerHTML + '\n\n';
+                                }
+                            });
+
+                            // Preserve subscript/superscript as raw HTML — Markdown has no native syntax for these
+                            turndownService.addRule('preserveSubSup', {
+                                filter: ['sub', 'sup'],
+                                replacement: function(content, node) {
+                                    const tag = node.tagName.toLowerCase();
+                                    return `<${tag}>${content}</${tag}>`;
+                                }
+                            });
 
         // Exhibit reference spans like (Video 1) stay inline — no newlines
         turndownService.addRule('preserveExhibitRefSpans', {
@@ -502,9 +511,10 @@
             }
         }
 
-        // 6. Convert to Markdown
+              // 6. Convert to Markdown
         let markdownBody = turndownService.turndown(clone.innerHTML);
 
+        markdownBody = markdownBody.replace(/\*\*\*\*/g, ''); // collapse adjacent bold spans with no gap
         markdownBody = markdownBody.replace(/Collapse All/gi, '');
         markdownBody = markdownBody.replace(/\n{3,}/g, '\n\n').trim();
 
