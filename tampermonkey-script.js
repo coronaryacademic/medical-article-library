@@ -124,6 +124,19 @@
             }
         });
 
+                // Preserve centered paragraphs (e.g. formula lines) as raw HTML — Markdown has no alignment syntax
+        turndownService.addRule('preserveCenteredText', {
+            filter: function(node) {
+                if (node.nodeName !== 'P' && node.nodeName !== 'DIV') return false;
+                const inlineCenter = node.style && node.style.textAlign === 'center';
+                const computedCenter = window.getComputedStyle(node).textAlign === 'center';
+                return inlineCenter || computedCenter;
+            },
+            replacement: function(content, node) {
+                return '\n\n<p style="text-align:center">' + content.trim() + '</p>\n\n';
+            }
+        });
+
         // Hidden exhibit media assets (img, video) preserved as raw HTML blocks
         turndownService.addRule('preserveExhibitMediaAssets', {
             filter: function(node) {
