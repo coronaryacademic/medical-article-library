@@ -406,16 +406,16 @@
         // Main section headers (section[data-section-id] h1) -> <h1>
         // Native subheadings (h2/h3/h4 or p>strong) -> <h2>
 
-        clone.querySelectorAll('section[data-section-id]').forEach(sec => {
-            const h1 = sec.querySelector('h1, button h1, [class*="font-medium"][class*="uppercase"]');
-            if (h1) {
-                const text = h1.innerText.trim();
-                if (text && text.length < 90) {
-                    const cleanH1 = document.createElement('h1');
-                    cleanH1.innerText = text;
-                    sec.prepend(cleanH1);
-                }
-            }
+                        clone.querySelectorAll('section[data-section-id]').forEach(sec => {
+                    const h1 = sec.querySelector('h1, button h1, [class*="font-medium"][class*="uppercase"]');
+                    if (h1) {
+                        const text = h1.innerText.trim();
+                        if (text && text.length < 90) {
+                            const cleanH1 = document.createElement('h1');
+                            cleanH1.innerHTML = h1.innerHTML;
+                            sec.prepend(cleanH1);
+                        }
+                    }
             // Remove duplicate H1 inside accordion buttons so turndown doesn't duplicate headers
             sec.querySelectorAll('button[aria-controls^="section-body"]').forEach(btn => {
                 btn.querySelectorAll('h1').forEach(h => h.remove());
@@ -423,13 +423,13 @@
         });
 
         // Ensure native subheadings (h2, h3, h4) become crisp <h2> subheadings
-        clone.querySelectorAll('h2, h3, h4').forEach(h => {
-            const text = h.innerText.trim();
-            if (!text || text.length > 90) return;
-            const cleanH2 = document.createElement('h2');
-            cleanH2.innerText = text;
-            h.replaceWith(cleanH2);
-        });
+                    clone.querySelectorAll('h2, h3, h4').forEach(h => {
+                        const text = h.innerText.trim();
+                        if (!text || text.length > 90) return;
+                        const cleanH2 = document.createElement('h2');
+                        cleanH2.innerHTML = h.innerHTML;
+                        h.replaceWith(cleanH2);
+                    });
 
         // Keep native subheadings clean without altering paragraph text
 
