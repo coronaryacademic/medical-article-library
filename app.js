@@ -1816,12 +1816,12 @@ function displayArticle(id) {
     articleBody.innerText = cleanMd;
   }
 
-  // Re-bind removal handlers to all restored text highlights
+   // Re-bind removal handlers to all restored text highlights
   articleBody.querySelectorAll('mark.yellow-highlight').forEach(mark => {
     mark.onclick = (e) => {
       e.stopPropagation();
-      const text = mark.innerText;
-      mark.replaceWith(text);
+      const frag = document.createRange().createContextualFragment(mark.innerHTML);
+      mark.replaceWith(frag);
       saveCurrentArticleHighlights();
     };
   });
@@ -2632,10 +2632,10 @@ function setupTextHighlighter() {
       range.surroundContents(mark);
       selection.removeAllRanges();
 
-      mark.onclick = (e) => {
+           mark.onclick = (e) => {
         e.stopPropagation();
-        const text = mark.innerText;
-        mark.replaceWith(text);
+        const frag = document.createRange().createContextualFragment(mark.innerHTML);
+        mark.replaceWith(frag);
         saveCurrentArticleHighlights();
       };
 

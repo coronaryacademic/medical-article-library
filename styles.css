@@ -1701,6 +1701,18 @@ mark.yellow-highlight * {
   margin: 0 !important;
 }
 
+mark.yellow-highlight sub {
+  font-size: smaller !important;
+  vertical-align: sub !important;
+  line-height: 0 !important;
+}
+
+mark.yellow-highlight sup {
+  font-size: smaller !important;
+  vertical-align: super !important;
+  line-height: 0 !important;
+}
+
 mark.yellow-highlight:hover {
   background-color: rgb(235, 235, 0) !important;
 }
