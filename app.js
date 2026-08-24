@@ -9,8 +9,9 @@ if (typeof marked !== 'undefined') {
 
 // IndexedDB config (replaces localStorage — no size limit)
 const DB_NAME = 'CoursologyLibrary';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'articles';
+const MEDIA_STORE_NAME = 'media';
 const STORAGE_KEY = 'coursology_markdown_articles_db'; // kept for localStorage migration
 const INITIALIZED_KEY = 'coursology_library_initialized';
 
@@ -24,6 +25,9 @@ function openDB() {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) {
+        db.createObjectStore(MEDIA_STORE_NAME, { keyPath: 'key' });
       }
     };
     req.onsuccess = (e) => { _db = e.target.result; resolve(_db); };
@@ -69,6 +73,64 @@ async function dbClear() {
     req.onsuccess = () => resolve();
     req.onerror = (e) => reject(e.target.error);
   });
+}
+
+// Media Store Helper Functions
+async function dbPutMedia(key, blob) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+    const req = tx.objectStore(MEDIA_STORE_NAME).put({ key, blob, updatedAt: Date.now() });
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbGetAllMedia() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+    const req = tx.objectStore(MEDIA_STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbDeleteMedia(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+    const req = tx.objectStore(MEDIA_STORE_NAME).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbClearMedia() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+    const req = tx.objectStore(MEDIA_STORE_NAME).clear();
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function loadMediaFromDB() {
+  try {
+    const items = await dbGetAllMedia();
+    for (const item of items) {
+      if (item && item.key && item.blob) {
+        const blobUrl = URL.createObjectURL(item.blob);
+        localBlobStore.set(item.key, blobUrl);
+        const baseName = item.key.replace(/^media\//, '');
+        localBlobStore.set(baseName, blobUrl);
+      }
+    }
+    console.log('[Coursology] Loaded', items.length, 'media items from IndexedDB');
+  } catch (e) {
+    console.warn('[Coursology] Failed to load media from IndexedDB:', e);
+  }
 }
 
 // Application State
@@ -273,14 +335,14 @@ async function handleDeleteFolder(folderName) {
     folders = folders.filter(f => f !== folderName);
     if (activeFolderName === folderName) activeFolderName = 'Uncategorized';
 
-    if (API_BASE_URL) {
-      try {
-        await fetch(`${API_BASE_URL}/api/delete-folder`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderName })
-        });
-      } catch (e) {}
+    try {
+      await fetch('/api/folders', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName })
+      });
+    } catch (e) {
+      console.warn('Host backend folder deletion failed:', e);
     }
 
     saveFoldersToStorage();
@@ -289,8 +351,17 @@ async function handleDeleteFolder(folderName) {
       activeArticleId = articles.length > 0 ? articles[0].id : null;
     }
 
-    await saveArticles();
-    await syncLibraryToBackend();
+    // Save updated folder list to backend catalog
+    try {
+      await fetch('/api/catalog/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folders })
+      });
+    } catch (e) {
+      console.warn('Could not sync folders to backend:', e);
+    }
+
     renderSidebar();
     if (activeArticleId) {
       displayArticle(activeArticleId);
@@ -474,70 +545,181 @@ async function init() {
 
 let activeFilterTab = 'all'; // 'all', 'fetched', 'pending'
 let activeTagFilters = new Set(); // empty = no filter, else Set of tag strings (OR logic)
+let activeWorkspaceMode = 'reader'; // 'reader' or 'bookmarks'
 
-// Load articles from IndexedDB (migrates from localStorage on first upgrade)
+function switchWorkspaceMode(mode) {
+  activeWorkspaceMode = mode;
+  const tabReader = document.getElementById('tab-reader-view');
+  const tabBookmarks = document.getElementById('tab-bookmarks-view');
+  const welcomeState = document.getElementById('welcome-state');
+  const articleContent = document.getElementById('article-content');
+  const bookmarksWorkspace = document.getElementById('bookmarks-workspace');
+  const mediaSidebar = document.getElementById('media-sidebar');
+
+  if (mode === 'bookmarks') {
+    if (tabReader) tabReader.classList.remove('active');
+    if (tabBookmarks) tabBookmarks.classList.add('active');
+    if (welcomeState) welcomeState.classList.add('hidden');
+    if (articleContent) articleContent.classList.add('hidden');
+    if (mediaSidebar) mediaSidebar.classList.add('hidden');
+    if (bookmarksWorkspace) bookmarksWorkspace.classList.remove('hidden');
+    renderBookmarksWorkspace();
+  } else {
+    if (tabBookmarks) tabBookmarks.classList.remove('active');
+    if (tabReader) tabReader.classList.add('active');
+    if (bookmarksWorkspace) bookmarksWorkspace.classList.add('hidden');
+    if (activeArticleId) {
+      if (articleContent) articleContent.classList.remove('hidden');
+      if (welcomeState) welcomeState.classList.add('hidden');
+    } else {
+      if (welcomeState) welcomeState.classList.remove('hidden');
+      if (articleContent) articleContent.classList.add('hidden');
+    }
+  }
+}
+
+function renderBookmarksWorkspace() {
+  const grid = document.getElementById('bookmarks-list-grid');
+  const countBadge = document.getElementById('top-bookmark-count');
+  const sortSelect = document.getElementById('bookmarks-sort-select');
+  const topSearchInput = document.getElementById('top-search-input');
+  const searchInput = document.getElementById('search-input');
+
+  const bookmarked = articles.filter(a => a.bookmarked);
+  if (countBadge) countBadge.textContent = bookmarked.length;
+
+  if (!grid) return;
+
+  const query = (topSearchInput && topSearchInput.value) ? topSearchInput.value.toLowerCase().trim() : (searchInput ? searchInput.value.toLowerCase().trim() : '');
+  let filtered = bookmarked.filter(a => {
+    if (!query) return true;
+    return (a.title && a.title.toLowerCase().includes(query)) ||
+           (a.folderName && a.folderName.toLowerCase().includes(query)) ||
+           (a.markdown && a.markdown.toLowerCase().includes(query));
+  });
+
+  const sortVal = sortSelect ? sortSelect.value : 'newest';
+  if (sortVal === 'title') {
+    filtered.sort((a, b) => a.title.localeCompare(b.title));
+  } else if (sortVal === 'folder') {
+    filtered.sort((a, b) => (a.folderName || 'Uncategorized').localeCompare(b.folderName || 'Uncategorized'));
+  } else {
+    filtered.sort((a, b) => (b.id > a.id ? 1 : -1));
+  }
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 48px 24px; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 16px;">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">⭐</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 6px;">${query ? 'No matching bookmarked guides found' : 'No Bookmarked Guides Yet'}</h3>
+        <p style="font-size: 0.85rem; color: #64748b; max-width: 420px; margin: 0 auto;">
+          ${query ? 'Try searching for another medical term or topic.' : 'Click the ⭐ star icon next to any article title in the sidebar to add it to your Bookmarks workspace for quick reference.'}
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(art => {
+    const title = escapeHtml(art.title || 'Untitled Article');
+    const folder = escapeHtml(art.folderName || 'Uncategorized');
+    const date = art.date || art.extractedAt || 'No Date';
+    const plainText = (art.markdown || '').replace(/[#*`_~]/g, '').slice(0, 140) + '...';
+
+    return `
+      <div class="bookmark-card">
+        <div>
+          <div class="bm-card-header">
+            <h3 class="bm-card-title" onclick="openArticleFromBookmarks('${art.id}')">${title}</h3>
+            <button class="bm-remove-btn" title="Remove Bookmark" onclick="toggleBookmarkFromWorkspace('${art.id}')">
+              <svg viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.8" style="width:18px; height:18px;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            </button>
+          </div>
+          <span class="bm-card-folder">📁 ${folder}</span>
+          <p class="bm-card-excerpt">${escapeHtml(plainText)}</p>
+        </div>
+        <div class="bm-card-actions">
+          <span style="font-size:0.75rem; color:#94a3b8;">${escapeHtml(date)}</span>
+          <button class="bm-open-btn" onclick="openArticleFromBookmarks('${art.id}')">Open Guide →</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openArticleFromBookmarks(artId) {
+  switchWorkspaceMode('reader');
+  displayArticle(artId);
+}
+
+async function toggleBookmarkFromWorkspace(artId) {
+  const art = articles.find(a => a.id === artId);
+  if (art) {
+    art.bookmarked = !art.bookmarked;
+    await saveArticles(art);
+    renderSidebar();
+    renderBookmarksWorkspace();
+  }
+}
+
+// Load articles from host backend API (falls back to IndexedDB if offline)
 async function loadArticles() {
   try {
-    // One-time migration: if old localStorage data exists, import it into IndexedDB
-    const oldData = localStorage.getItem(STORAGE_KEY);
-    if (oldData) {
-      try {
-        const oldArticles = JSON.parse(oldData);
-        for (const a of oldArticles) { await dbPut(a); }
-        localStorage.removeItem(STORAGE_KEY);
-        console.log('[Coursology] Migrated', oldArticles.length, 'articles from localStorage → IndexedDB');
-      } catch (e) {
-        console.warn('[Coursology] localStorage migration failed:', e);
+    let loadedFromApi = false;
+    try {
+      const resp = await fetch('/api/catalog');
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && Array.isArray(data.articles)) {
+          articles = data.articles;
+          if (Array.isArray(data.folders) && data.folders.length > 0) {
+            folders = data.folders;
+            saveFoldersToStorage();
+          }
+          for (const art of articles) { await dbPut(art); }
+          loadedFromApi = true;
+          console.log('[Coursology] Hydrated catalog from Host Backend API:', articles.length, 'articles');
+        }
       }
+    } catch (e) {
+      console.warn('[Coursology] Host API endpoint unavailable, using local IndexedDB:', e);
     }
 
-    articles = await dbGetAll();
-    loadFoldersFromStorage();
+    if (!loadedFromApi) {
+      articles = await dbGetAll();
+      loadFoldersFromStorage();
+    }
+
+    await loadMediaFromDB();
+
     // Filter out any obsolete sample/test template articles if they exist in cache
     articles = articles.filter(a => a.id !== 'test-1' && a.id !== 'art-sample-1' && a.id !== 'art-sample-2' && a.title !== 'Acute Coronary Syndrome');
-
-    // If IndexedDB is empty, seed from default library_data/library.json catalog
-    if (articles.length === 0) {
-      try {
-        const resp = await fetch('library_data/library.json');
-        if (resp.ok) {
-          const libData = await resp.json();
-          if (libData.folders && Array.isArray(libData.folders)) {
-            folders = [...libData.folders];
-          }
-          if (libData.articles && Array.isArray(libData.articles)) {
-            for (const art of libData.articles) {
-              art.fetched = art.fetched || false;
-              articles.push(art);
-              await dbPut(art);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[Coursology] Could not load default library.json:', e);
-      }
-    }
 
     // Sort newest first or by master ID
     articles.sort((a, b) => (b.id > a.id ? 1 : -1));
   } catch (e) {
-    console.error('[Coursology] Failed to load articles from IndexedDB:', e);
+    console.error('[Coursology] Failed to load articles:', e);
     articles = [];
   }
 }
 
-// Save a single article to IndexedDB (called per-article, not full array dump)
+// Save a single article to host backend API & IndexedDB
 async function saveArticles(articleToSave) {
   try {
     if (articleToSave) {
       await dbPut(articleToSave);
+      try {
+        await fetch('/api/articles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(articleToSave)
+        });
+      } catch (e) {}
     } else {
-      // Full re-sync: put all current articles
       for (const a of articles) { await dbPut(a); }
     }
   } catch (e) {
-    console.error('[Coursology] IndexedDB save failed:', e);
-    alert('Warning: Could not save article to local storage. IndexedDB error: ' + e.message);
+    console.error('[Coursology] Save failed:', e);
   }
   renderSidebar();
 }
@@ -562,6 +744,37 @@ function setupEventListeners() {
   if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
   if (exportAllBtn) exportAllBtn.addEventListener('click', handleExportBackup);
   if (exportFolderBtn) exportFolderBtn.addEventListener('click', handleExportFolderPackage);
+
+  // Top Workspace Header & Bookmarks Controls
+  const topSearchInput = document.getElementById('top-search-input');
+  const clearTopSearchBtn = document.getElementById('clear-top-search-btn');
+  const tabReaderView = document.getElementById('tab-reader-view');
+  const tabBookmarksView = document.getElementById('tab-bookmarks-view');
+  const bookmarksSortSelect = document.getElementById('bookmarks-sort-select');
+
+  if (topSearchInput) {
+    topSearchInput.addEventListener('input', () => {
+      if (clearTopSearchBtn) {
+        if (topSearchInput.value) clearTopSearchBtn.classList.remove('hidden');
+        else clearTopSearchBtn.classList.add('hidden');
+      }
+      renderSidebar();
+      if (activeWorkspaceMode === 'bookmarks') renderBookmarksWorkspace();
+    });
+  }
+
+  if (clearTopSearchBtn) {
+    clearTopSearchBtn.addEventListener('click', () => {
+      if (topSearchInput) topSearchInput.value = '';
+      clearTopSearchBtn.classList.add('hidden');
+      renderSidebar();
+      if (activeWorkspaceMode === 'bookmarks') renderBookmarksWorkspace();
+    });
+  }
+
+  if (tabReaderView) tabReaderView.addEventListener('click', () => switchWorkspaceMode('reader'));
+  if (tabBookmarksView) tabBookmarksView.addEventListener('click', () => switchWorkspaceMode('bookmarks'));
+  if (bookmarksSortSelect) bookmarksSortSelect.addEventListener('change', renderBookmarksWorkspace);
 
 
 
@@ -616,6 +829,66 @@ function setupEventListeners() {
   if (scriptModal) {
     scriptModal.addEventListener('click', (e) => {
       if (shouldCloseModalOnBackdropClick(e, scriptModal)) closeScriptModal();
+    });
+  }
+
+  // Settings View Modal Handlers
+  const settingsModalBtn = document.getElementById('settings-modal-btn');
+  const footerSettingsBtn = document.getElementById('footer-settings-btn');
+  const settingsModal = document.getElementById('settings-modal');
+  const closeSettingsModalBtn = document.getElementById('close-settings-modal-btn');
+  const settingsImportZipInput = document.getElementById('settings-import-zip-input');
+  const settingsScriptModalBtn = document.getElementById('settings-script-modal-btn');
+  const settingsImportTreeBtn = document.getElementById('settings-import-tree-btn');
+
+  const openSettingsModal = () => {
+    if (settingsModal) settingsModal.classList.remove('hidden');
+  };
+
+  const closeSettingsModal = () => {
+    if (settingsModal) settingsModal.classList.add('hidden');
+  };
+
+  if (settingsModalBtn) settingsModalBtn.addEventListener('click', openSettingsModal);
+  if (footerSettingsBtn) footerSettingsBtn.addEventListener('click', openSettingsModal);
+  if (closeSettingsModalBtn) closeSettingsModalBtn.addEventListener('click', closeSettingsModal);
+
+  if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+      if (shouldCloseModalOnBackdropClick(e, settingsModal)) closeSettingsModal();
+    });
+  }
+
+  if (settingsImportZipInput) settingsImportZipInput.addEventListener('change', (e) => {
+    handleImportZipPackage(e);
+    closeSettingsModal();
+  });
+
+  if (settingsScriptModalBtn) settingsScriptModalBtn.addEventListener('click', () => {
+    closeSettingsModal();
+    openScriptModal();
+  });
+
+  if (settingsImportTreeBtn) settingsImportTreeBtn.addEventListener('click', () => {
+    closeSettingsModal();
+    if (treeModal) {
+      treeModal.classList.remove('hidden');
+      if (treeHtmlInput) treeHtmlInput.focus();
+    }
+  });
+
+  const cleanOrphanedMediaBtn = document.getElementById('clean-orphaned-media-btn');
+  if (cleanOrphanedMediaBtn) {
+    cleanOrphanedMediaBtn.addEventListener('click', async () => {
+      try {
+        const resp = await fetch('/api/clean-orphaned-media', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+          alert(`Orphaned Media Cleanup Complete!\nRemoved ${data.cleanedMediaCount} unused media file(s) from host disk.`);
+        }
+      } catch (e) {
+        alert('Failed to clean media files: ' + e.message);
+      }
     });
   }
 
@@ -1476,7 +1749,9 @@ function renderTagFilterBar() {
 }
 
 function renderSidebar() {
-  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const sidebarSearch = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const topSearch = (document.getElementById('top-search-input') || {}).value;
+  const query = (topSearch && topSearch.trim()) ? topSearch.toLowerCase().trim() : sidebarSearch;
   articleFlatList.innerHTML = '';
 
   let filtered = articles.filter(a => 
@@ -1757,8 +2032,12 @@ function displayArticle(id) {
 
   activeArticleId = id;
 
-  welcomeState.classList.add('hidden');
-  articleContent.classList.remove('hidden');
+  if (activeWorkspaceMode === 'bookmarks') {
+    switchWorkspaceMode('reader');
+  } else {
+    welcomeState.classList.add('hidden');
+    articleContent.classList.remove('hidden');
+  }
 
   articleTitle.innerText = article.title;
 
@@ -1828,13 +2107,23 @@ function displayArticle(id) {
 
   // Resolve localBlobStore URLs and attach automatic CDN fallback handler
   articleBody.querySelectorAll('img, video').forEach(el => {
-    const src = el.getAttribute('src');
-    if (src) {
-      const baseName = src.replace(/^media\//, '');
-      if (localBlobStore.has(src)) {
-        el.src = localBlobStore.get(src);
+    let rawSrc = el.getAttribute('src') || '';
+    let origSrc = el.getAttribute('data-original-src');
+    if (!origSrc && !rawSrc.startsWith('blob:') && !rawSrc.startsWith('http://') && !rawSrc.startsWith('https://')) {
+      origSrc = rawSrc;
+    }
+    if (!origSrc && el.getAttribute('data-cdn-src')) {
+      origSrc = el.getAttribute('data-cdn-src');
+    }
+    const targetKey = origSrc || rawSrc;
+    if (targetKey) {
+      const baseName = targetKey.replace(/^media\//, '');
+      if (localBlobStore.has(targetKey)) {
+        el.src = localBlobStore.get(targetKey);
+        el.setAttribute('data-original-src', targetKey);
       } else if (localBlobStore.has(baseName)) {
         el.src = localBlobStore.get(baseName);
+        el.setAttribute('data-original-src', targetKey);
       }
     }
     el.onerror = function() {
@@ -1963,6 +2252,63 @@ function displayArticle(id) {
   renderSidebar();
   renderMediaSidebar(articleBody);
   updateArticleFontSize();
+
+  // 8. Boot sticky heading scroll tracker
+  initStickyHeading();
+}
+
+// Sticky heading breadcrumb — updates as you scroll through article sections
+let _stickyHeadingObserver = null;
+function initStickyHeading() {
+  const bar = document.getElementById('sticky-heading-bar');
+  const label = document.getElementById('sticky-heading-text');
+  const mainViewer = document.querySelector('.main-viewer');
+  if (!bar || !label || !mainViewer) return;
+
+  // Clean up any previous observer
+  if (_stickyHeadingObserver) {
+    _stickyHeadingObserver.disconnect();
+    _stickyHeadingObserver = null;
+  }
+
+  const headings = Array.from(document.querySelectorAll('#article-body h1, #article-body h2, #article-body h3'));
+  if (headings.length === 0) {
+    bar.classList.add('hidden');
+    return;
+  }
+
+  // Track which heading is currently "at the top" using IntersectionObserver
+  const headingMap = new Map();
+
+  _stickyHeadingObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      headingMap.set(entry.target, entry);
+    });
+
+    // Find the last heading that has crossed above the viewport midpoint
+    let activeHeading = null;
+    headings.forEach(h => {
+      const obs = headingMap.get(h);
+      if (!obs) return;
+      if (!obs.isIntersecting || obs.boundingClientRect.top < 80) {
+        activeHeading = h;
+      }
+    });
+
+    if (activeHeading) {
+      const text = activeHeading.textContent.trim().replace(/^[▶▼]\s*/, '');
+      label.textContent = text;
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
+  }, {
+    root: mainViewer,
+    rootMargin: '-80px 0px 0px 0px',
+    threshold: 0
+  });
+
+  headings.forEach(h => _stickyHeadingObserver.observe(h));
 }
 
 // Ensure first section has an "Introduction" heading if missing
@@ -3174,13 +3520,14 @@ function showPrevFigure(e) {
   }
 }
 
-// Delete Article
+// Delete Article (Executes physical hardware file unlinking on host server)
 async function deleteArticle(id) {
   articles = articles.filter(a => a.id !== id);
   try {
     await dbDelete(id);
+    await fetch(`/api/articles/${encodeURIComponent(id)}`, { method: 'DELETE' });
   } catch (e) {
-    console.error('Failed to delete article from IndexedDB:', e);
+    console.error('Failed to delete article from host backend / IndexedDB:', e);
   }
   if (activeArticleId === id) {
     activeArticleId = articles.length > 0 ? articles[0].id : null;
@@ -3199,11 +3546,14 @@ async function deleteArticle(id) {
 
 // Clear All Articles
 async function handleClearAll() {
-  if (confirm('Are you sure you want to delete all saved articles and folders?')) {
+  if (confirm('Are you sure you want to delete all saved articles, media, and folders?')) {
     articles = [];
     folders = ['Uncategorized'];
     activeArticleId = null;
     await dbClear();
+    try { await dbClearMedia(); } catch (e) {}
+    try { await fetch('/api/clear-all', { method: 'POST' }); } catch (e) {}
+    localBlobStore.clear();
     renderSidebar();
     welcomeState.classList.remove('hidden');
     articleContent.classList.add('hidden');
@@ -3655,6 +4005,10 @@ async function handleImportZipPackage(e) {
       localBlobStore.set(mFile.name, blobUrl);
       const baseName = mFile.name.replace(/^media\//, '');
       localBlobStore.set(baseName, blobUrl);
+
+      // Persist binary media blob in IndexedDB so it survives browser reload
+      await dbPutMedia(mFile.name, typedBlob);
+      await dbPutMedia(baseName, typedBlob);
     }
 
     let newArticles = [];
@@ -3689,6 +4043,14 @@ async function handleImportZipPackage(e) {
         await addArticle(art, false);
       }
       await saveArticles();
+
+      // Push ZIP to host server for physical hardware storage
+      try {
+        const formData = new FormData();
+        formData.append('zipFile', file);
+        fetch('/api/import-zip', { method: 'POST', body: formData }).catch(e => {});
+      } catch (e) {}
+
       renderSidebar();
       displayArticle(newArticles[0].id);
       alert(`Successfully imported folder package "${zipFolderName}" containing ${newArticles.length} article(s)!`);
