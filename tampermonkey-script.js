@@ -125,7 +125,7 @@
         });
 
                 // Preserve centered paragraphs (e.g. formula lines) as raw HTML — Markdown has no alignment syntax
-        turndownService.addRule('preserveCenteredText', {
+               turndownService.addRule('preserveCenteredText', {
             filter: function(node) {
                 if (node.nodeName !== 'P' && node.nodeName !== 'DIV') return false;
                 const inlineCenter = node.style && node.style.textAlign === 'center';
@@ -133,7 +133,13 @@
                 return inlineCenter || computedCenter;
             },
             replacement: function(content, node) {
-                return '\n\n<p style="text-align:center">' + content.trim() + '</p>\n\n';
+                // content is Markdown (turndown already turned <strong> into **bold**),
+                // but since it's wrapped in raw HTML here, marked.js won't re-parse it.
+                // So convert the Markdown emphasis syntax into real tags before wrapping.
+                let html = content.trim()
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+                return '\n\n<p style="text-align:center">' + html + '</p>\n\n';
             }
         });
 

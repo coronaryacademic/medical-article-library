@@ -2038,19 +2038,25 @@ function setupScrollSpy() {
 function processTables(container) {
   const tables = container.querySelectorAll('table');
   tables.forEach(table => {
-    if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'table-wrapper';
-      wrapper.style.display = 'none';
-      table.parentNode.insertBefore(wrapper, table);
-      wrapper.appendChild(table);
-    } else if (table.parentElement) {
-      table.parentElement.style.display = 'none';
-    }
+    // Only hide/pop-up tables that were captured as click-through exhibits.
+    // Tables that already appear inline in the article text (no flag set
+    // by the extractor) should stay visible right where they occur.
+    const isExhibitTable = table.getAttribute('data-exhibit-asset') === 'true';
 
-    table.style.display = 'none';
     table.classList.add('coursology-medical-table');
-    table.setAttribute('data-exhibit-asset', 'true');
+
+    if (isExhibitTable) {
+      if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-wrapper';
+        wrapper.style.display = 'none';
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+      } else if (table.parentElement) {
+        table.parentElement.style.display = 'none';
+      }
+      table.style.display = 'none';
+    }
 
     table.querySelectorAll('th, td').forEach(cell => {
       cell.style.padding = '12px 18px';
