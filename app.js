@@ -17,6 +17,16 @@ const INITIALIZED_KEY = 'coursology_library_initialized';
 
 let _db = null;
 
+let _syncWarningShown = false;
+function showSyncWarning() {
+  if (_syncWarningShown) return;
+  _syncWarningShown = true;
+  const bar = document.createElement('div');
+  bar.textContent = '⚠ Could not reach host backend — changes are only saved in this browser, not on disk.';
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#fee2e2;color:#991b1b;text-align:center;padding:8px;font-weight:600;z-index:99999;font-size:0.85rem;';
+  document.body.prepend(bar);
+}
+
 function openDB() {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
@@ -264,18 +274,20 @@ async function handleCreateFolder() {
   const folderName = prompt('Enter new folder name:');
   if (!folderName || !folderName.trim()) return;
   const cleanName = folderName.trim();
-  if (!folders.includes(cleanName)) {
+   if (!folders.includes(cleanName)) {
     folders.push(cleanName);
     activeFolderName = cleanName;
     saveFoldersToStorage();
-    if (API_BASE_URL) {
-      try {
-        await fetch(`${API_BASE_URL}/api/create-folder`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderName: cleanName })
-        });
-      } catch (e) {}
+    try {
+      const resp = await fetch('/api/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName: cleanName })
+      });
+      if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
+    } catch (e) {
+      console.error('[Coursology] create-folder sync failed:', e);
+      showSyncWarning();
     }
     renderSidebar();
   } else {
@@ -301,14 +313,16 @@ async function handleRenameFolder(oldName) {
     if (a.folderName === oldName) a.folderName = cleanNew;
   });
 
-  if (API_BASE_URL) {
     try {
-      await fetch(`${API_BASE_URL}/api/rename-folder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName, newName: cleanNew })
-      });
-    } catch (e) {}
+    const resp = await fetch('/api/rename-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldName, newName: cleanNew })
+    });
+    if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
+  } catch (e) {
+    console.error('[Coursology] rename-folder sync failed:', e);
+    showSyncWarning();
   }
 
   saveFoldersToStorage();
@@ -335,14 +349,16 @@ async function handleDeleteFolder(folderName) {
     folders = folders.filter(f => f !== folderName);
     if (activeFolderName === folderName) activeFolderName = 'Uncategorized';
 
-    try {
-      await fetch('/api/folders', {
+      try {
+      const resp = await fetch('/api/folders', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderName })
       });
+      if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
     } catch (e) {
-      console.warn('Host backend folder deletion failed:', e);
+      console.error('Host backend folder deletion failed:', e);
+      showSyncWarning();
     }
 
     saveFoldersToStorage();
@@ -351,15 +367,18 @@ async function handleDeleteFolder(folderName) {
       activeArticleId = articles.length > 0 ? articles[0].id : null;
     }
 
-    // Save updated folder list to backend catalog
+
+       // Save updated folder list to backend catalog
     try {
-      await fetch('/api/catalog/folders', {
+      const resp = await fetch('/api/catalog/folders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folders })
       });
+      if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
     } catch (e) {
-      console.warn('Could not sync folders to backend:', e);
+      console.error('Could not sync folders to backend:', e);
+      showSyncWarning();
     }
 
     renderSidebar();
@@ -709,14 +728,31 @@ async function saveArticles(articleToSave) {
     if (articleToSave) {
       await dbPut(articleToSave);
       try {
-        await fetch('/api/articles', {
+        const resp = await fetch('/api/articles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(articleToSave)
         });
-      } catch (e) {}
+        if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
+      } catch (e) {
+        console.error('[Coursology] Backend sync FAILED for article:', articleToSave.id, e);
+        showSyncWarning();
+      }
     } else {
-      for (const a of articles) { await dbPut(a); }
+      for (const a of articles) {
+        await dbPut(a);
+        try {
+          const resp = await fetch('/api/articles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(a)
+          });
+          if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
+        } catch (e) {
+          console.error('[Coursology] Backend sync FAILED for article:', a.id, e);
+          showSyncWarning();
+        }
+      }
     }
   } catch (e) {
     console.error('[Coursology] Save failed:', e);
@@ -3802,12 +3838,14 @@ function getMediaExtension(url, blob) {
 
 // Export Folder Package (.zip) with Downloaded Hard-Drive Media & CDN Fallback Preservation
 async function handleExportFolderPackage() {
-  if (articles.length === 0) {
-    alert('No articles available to export.');
+  const articlesToExport = articles.filter(a => (a.folderName || 'Uncategorized') === activeFolderName);
+
+  if (articlesToExport.length === 0) {
+    alert('No articles in the currently selected folder to export.');
     return;
   }
 
-  const defaultName = articles[0]?.folderName || 'Medical Articles Pack';
+  const defaultName = activeFolderName || 'Medical Articles Pack';
   const folderName = prompt('Enter a name for your export folder package:', defaultName);
   if (!folderName || !folderName.trim()) return;
 
@@ -3835,7 +3873,7 @@ async function handleExportFolderPackage() {
     // Scan all articles ONLY for figure images (skipping all video files)
     const isVideoUrl = (u) => /\.(mp4|webm|mov|avi|mkv|flv|wmv)(\?.*)?$/i.test(u) || (u && u.startsWith('data:video'));
     const mediaUrlsToFetch = new Set();
-    articles.forEach(art => {
+    articlesToExport.forEach(art => {
       const content = (art.markdown || '') + ' ' + (art.html || '');
 
       // 1. img src
@@ -3899,7 +3937,7 @@ async function handleExportFolderPackage() {
 
     // Rewrite article contents with local relative media paths + backup CDN URLs
     const exportedArticles = [];
-    articles.forEach((art, idx) => {
+    articlesToExport.forEach((art, idx) => {
       let updatedMd = art.markdown || '';
 
       mediaUrlMap.forEach((relPath, originalUrl) => {

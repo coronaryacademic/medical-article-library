@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 8088;
 
 // Directories — stored OUTSIDE the git repo at ~/UW_Library_Data
-const DATA_DIR = path.join(require('os').homedir(), 'UW_Library_Data');
+const DATA_DIR = '/home/momen/Desktop/UW Library Files';
 const ARTICLES_DIR = path.join(DATA_DIR, 'articles');
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
 const LIBRARY_JSON_PATH = path.join(DATA_DIR, 'library.json');
@@ -159,8 +159,8 @@ app.post('/api/articles', (req, res) => {
     } else {
       catalog.articles.push(article);
     }
-    if (article.folder && !catalog.folders.includes(article.folder)) {
-      catalog.folders.push(article.folder);
+    if (article.folderName && !catalog.folders.includes(article.folderName)) {
+      catalog.folders.push(article.folderName);
     }
     saveCatalog(catalog);
 
@@ -231,7 +231,7 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
 
       newArticles = (manifest.articles || []).map(art => ({
         ...art,
-        folder: art.folder || folderName,
+        folderName: art.folderName || folderName,
         fetched: art.fetched !== undefined ? art.fetched : true
       }));
     } else {
@@ -247,7 +247,7 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
         newArticles.push({
           id,
           title,
-          folder: packageName,
+          folderName: packageName,
           fetched: true,
           date: new Date().toISOString().split('T')[0],
           markdown: content,
@@ -277,6 +277,75 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
   }
 });
 
+// 4b. POST /api/create-folder
+app.post('/api/create-folder', (req, res) => {
+  try {
+    const { folderName } = req.body;
+    if (!folderName) {
+      return res.status(400).json({ success: false, error: 'folderName is required' });
+    }
+    const catalog = readCatalog();
+    if (!catalog.folders.includes(folderName)) {
+      catalog.folders.push(folderName);
+      saveCatalog(catalog);
+    }
+    console.log(`[Host Server] Created folder on disk: "${folderName}"`);
+    res.json({ success: true, folders: catalog.folders });
+  } catch (err) {
+    console.error('[Host Server] Error creating folder:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4c. POST /api/rename-folder
+app.post('/api/rename-folder', (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+    if (!oldName || !newName) {
+      return res.status(400).json({ success: false, error: 'oldName and newName are required' });
+    }
+    const catalog = readCatalog();
+    catalog.folders = catalog.folders.map(f => (f === oldName ? newName : f));
+    catalog.articles.forEach(a => {
+      if (a.folderName === oldName) a.folderName = newName;
+    });
+    saveCatalog(catalog);
+
+    // Also rewrite each affected article's individual JSON file on disk
+    catalog.articles
+      .filter(a => a.folderName === newName)
+      .forEach(a => {
+        const safeId = String(a.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const p = path.join(ARTICLES_DIR, `${safeId}.json`);
+        if (fs.existsSync(p)) fs.writeFileSync(p, JSON.stringify(a, null, 2), 'utf-8');
+      });
+
+    console.log(`[Host Server] Renamed folder on disk: "${oldName}" -> "${newName}"`);
+    res.json({ success: true, folders: catalog.folders });
+  } catch (err) {
+    console.error('[Host Server] Error renaming folder:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4d. POST /api/catalog/folders - overwrite the full folder list
+app.post('/api/catalog/folders', (req, res) => {
+  try {
+    const { folders } = req.body;
+    if (!Array.isArray(folders)) {
+      return res.status(400).json({ success: false, error: 'folders must be an array' });
+    }
+    const catalog = readCatalog();
+    catalog.folders = folders;
+    saveCatalog(catalog);
+    console.log('[Host Server] Synced folder list to disk:', folders);
+    res.json({ success: true, folders: catalog.folders });
+  } catch (err) {
+    console.error('[Host Server] Error syncing folder list:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 5. DELETE /api/folders - Cascading Hardware Deletion & Media GC
 app.delete('/api/folders', (req, res) => {
   try {
@@ -286,7 +355,7 @@ app.delete('/api/folders', (req, res) => {
     }
 
     const catalog = readCatalog();
-    const articlesToDelete = catalog.articles.filter(a => a.folder === folderName);
+    const articlesToDelete = catalog.articles.filter(a => a.folderName === folderName);
 
     // Physically unlink each article JSON file on disk
     for (const art of articlesToDelete) {
@@ -298,7 +367,7 @@ app.delete('/api/folders', (req, res) => {
     }
 
     // Remove folder and articles from catalog
-    catalog.articles = catalog.articles.filter(a => a.folder !== folderName);
+    catalog.articles = catalog.articles.filter(a => a.folderName !== folderName);
     catalog.folders = catalog.folders.filter(f => f !== folderName);
     if (!catalog.folders.includes('Uncategorized')) catalog.folders.push('Uncategorized');
 
