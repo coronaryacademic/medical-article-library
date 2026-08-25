@@ -1051,6 +1051,39 @@ table.coursology-medical-table td {
   border-bottom: 1px solid #e2e8f0;
 }
 
+/* Bulleted lists inside medical tables (Key Features columns etc.) */
+table.coursology-medical-table td ul,
+table.coursology-medical-table td ol {
+  list-style-position: outside;
+  padding-left: 18px;
+  margin: 4px 0;
+}
+
+table.coursology-medical-table td ul {
+  list-style-type: disc;
+}
+
+table.coursology-medical-table td ol {
+  list-style-type: decimal;
+}
+
+/* Nested sub-list (e.g. "(+) Aggressive behavior / (−) Corneal clouding") */
+table.coursology-medical-table td li ul,
+table.coursology-medical-table td li ol {
+  list-style-type: circle;
+  margin: 2px 0;
+  padding-left: 18px;
+}
+
+table.coursology-medical-table td li {
+  margin-bottom: 3px;
+  line-height: 1.45;
+}
+
+table.coursology-medical-table td li:last-child {
+  margin-bottom: 0;
+}
+
 /* ==========================================
    Right Media Sidebar (Figures & Tables)
    ========================================== */
