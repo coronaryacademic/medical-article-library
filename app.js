@@ -4204,6 +4204,11 @@ async function importSingleZipFile(file) {
     const zip = await JSZip.loadAsync(file);
     const zipFolderName = file.name.replace(/\.zip$/i, '');
 
+    // Unique namespace per import so identically-named assets from different
+    // zip packages (e.g. "asset_1.png" in every export) never collide/overwrite
+    const importId = 'imp' + Date.now() + Math.random().toString(36).substring(2, 8);
+    const mediaKeyMap = new Map(); // original name -> namespaced name, for rewriting refs below
+
     // Extract media files into localBlobStore with explicit MIME types
     const mediaFiles = zip.filter((relPath, fileObj) => relPath.startsWith('media/') && !fileObj.dir);
     for (const mFile of mediaFiles) {
@@ -4219,13 +4224,37 @@ async function importSingleZipFile(file) {
       const typedBlob = new Blob([arrayBuffer], { type: mimeType });
       const blobUrl = URL.createObjectURL(typedBlob);
 
-      localBlobStore.set(mFile.name, blobUrl);
       const baseName = mFile.name.replace(/^media\//, '');
-      localBlobStore.set(baseName, blobUrl);
+      const namespacedBase = `${importId}__${baseName}`;
+      const namespacedRel = `media/${namespacedBase}`;
 
-      // Persist binary media blob in IndexedDB so it survives browser reload
-      await dbPutMedia(mFile.name, typedBlob);
-      await dbPutMedia(baseName, typedBlob);
+      localBlobStore.set(namespacedRel, blobUrl);
+      localBlobStore.set(namespacedBase, blobUrl);
+
+      // Persist binary media blob in IndexedDB under the namespaced key
+      await dbPutMedia(namespacedRel, typedBlob);
+      await dbPutMedia(namespacedBase, typedBlob);
+
+      mediaKeyMap.set(mFile.name, namespacedRel);
+      mediaKeyMap.set(baseName, namespacedBase);
+    }
+
+        // Rewrite media references inside article content so they point at
+    // THIS import's namespaced assets, not some other zip's same-named file
+    function rewriteMediaRefs(text) {
+      if (!text) return text;
+      let out = text;
+      // Longest keys first (e.g. "media/asset_1.jpg" before "asset_1.jpg")
+      const entries = Array.from(mediaKeyMap.entries()).sort((a, b) => b[0].length - a[0].length);
+      entries.forEach(([oldKey, newKey]) => {
+        const escaped = oldKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Negative lookbehind for "__" stops this from matching a filename
+        // that's already namespaced (e.g. "impABC__asset_1.jpg") and
+        // double-prefixing it into "impABC__impXYZ__asset_1.jpg"
+        const regex = new RegExp('(?<!__)' + escaped, 'g');
+        out = out.replace(regex, newKey);
+      });
+      return out;
     }
 
     let newArticles = [];
@@ -4237,7 +4266,9 @@ async function importSingleZipFile(file) {
       newArticles = (manifest.articles || []).map(art => ({
         ...art,
         id: art.id || (Date.now() + Math.random().toString(36).substring(2, 6)),
-        folderName: groupName
+        folderName: groupName,
+        markdown: rewriteMediaRefs(art.markdown),
+        html: rewriteMediaRefs(art.html)
       }));
     } else {
       const mdFiles = zip.filter((relPath, fileObj) => relPath.endsWith('.md') && !fileObj.dir);
@@ -4249,7 +4280,7 @@ async function importSingleZipFile(file) {
           id: 'art-' + Date.now() + '-' + i,
           title: title,
           extractedAt: new Date().toLocaleDateString(),
-          markdown: mdText,
+          markdown: rewriteMediaRefs(mdText),
           folderName: zipFolderName
         });
       }
