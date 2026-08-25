@@ -1530,7 +1530,22 @@ async function addArticle(articleData, autoSave = true) {
   if (articleData && articleData.markdown) {
     articleData.markdown = await optimizeMarkdownImages(articleData.markdown);
   }
-  const existingIdx = articles.findIndex(a => a.title === articleData.title);
+
+  // 1. Prefer matching by id (exact same article record)
+  let existingIdx = -1;
+  if (articleData.id) {
+    existingIdx = articles.findIndex(a => a.id === articleData.id);
+  }
+
+  // 2. Fall back to title+folder match — NOT title alone — so same-named
+  //    sections in different folders/packages never overwrite each other
+  if (existingIdx < 0) {
+    existingIdx = articles.findIndex(a =>
+      a.title === articleData.title &&
+      (a.folderName || 'Uncategorized') === (articleData.folderName || 'Uncategorized')
+    );
+  }
+
   if (existingIdx >= 0) {
     articles[existingIdx] = articleData;
   } else {
@@ -4145,17 +4160,47 @@ async function handleExportFolderPackage() {
   }
 }
 
-// Import Folder Package (.zip)
+// Import Folder Package(s) (.zip) — supports selecting multiple zips at once
 async function handleImportZipPackage(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
 
   if (typeof JSZip === 'undefined') {
     alert('JSZip library is missing.');
     return;
   }
 
-  try {
+  let totalImportedArticles = 0;
+  let totalImportedFolders = 0;
+  let failedFiles = [];
+
+  for (const file of files) {
+    try {
+      const importedCount = await importSingleZipFile(file);
+      totalImportedArticles += importedCount;
+      totalImportedFolders++;
+    } catch (err) {
+      console.error(`Failed to import ${file.name}:`, err);
+      failedFiles.push(file.name);
+    }
+  }
+
+  e.target.value = '';
+
+  if (totalImportedArticles > 0) {
+    renderSidebar();
+    if (articles.length > 0) displayArticle(articles[articles.length - 1].id);
+  }
+
+  let summary = `Imported ${totalImportedFolders} of ${files.length} zip package(s), ${totalImportedArticles} article(s) total.`;
+  if (failedFiles.length > 0) {
+    summary += `\n\nFailed: ${failedFiles.join(', ')}`;
+  }
+  alert(summary);
+}
+
+// Imports a single zip file's contents. Returns the number of articles imported.
+async function importSingleZipFile(file) {
     const zip = await JSZip.loadAsync(file);
     const zipFolderName = file.name.replace(/\.zip$/i, '');
 
@@ -4210,7 +4255,7 @@ async function handleImportZipPackage(e) {
       }
     }
 
-    if (newArticles.length > 0) {
+        if (newArticles.length > 0) {
       for (const art of newArticles) {
         await addArticle(art, false);
       }
@@ -4222,19 +4267,9 @@ async function handleImportZipPackage(e) {
         formData.append('zipFile', file);
         fetch('/api/import-zip', { method: 'POST', body: formData }).catch(e => {});
       } catch (e) {}
-
-      renderSidebar();
-      displayArticle(newArticles[0].id);
-      alert(`Successfully imported folder package "${zipFolderName}" containing ${newArticles.length} article(s)!`);
-    } else {
-      alert('No valid articles found inside zip package.');
     }
-  } catch (err) {
-    console.error('Import ZIP package error:', err);
-    alert('Failed to import zip package: ' + err.message);
-  } finally {
-    e.target.value = '';
-  }
+
+    return newArticles.length;
 }
 
 function downloadBlob(blob, filename) {
