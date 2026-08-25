@@ -2043,7 +2043,19 @@ function processTables(container) {
     // by the extractor) should stay visible right where they occur.
     const isExhibitTable = table.getAttribute('data-exhibit-asset') === 'true';
 
-    table.classList.add('coursology-medical-table');
+           table.classList.add('coursology-medical-table');
+
+    // Strip ALL inline background styling from the table and every descendant,
+    // no matter how deeply nested (span/div/strong wrappers, etc.)
+    table.style.backgroundColor = '';
+    table.style.background = '';
+    table.removeAttribute('bgcolor');
+    table.querySelectorAll('*').forEach(el => {
+      el.style.backgroundColor = '';
+      el.style.background = '';
+      el.style.backgroundImage = '';
+      el.removeAttribute('bgcolor');
+    });
 
     if (isExhibitTable) {
       if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
@@ -2058,7 +2070,7 @@ function processTables(container) {
       table.style.display = 'none';
     }
 
-    table.querySelectorAll('th, td').forEach(cell => {
+            table.querySelectorAll('th, td').forEach(cell => {
       cell.style.padding = '12px 18px';
       cell.style.lineHeight = '1.5';
       cell.style.wordBreak = 'normal';
@@ -2591,23 +2603,40 @@ function setupLightboxGallery(container, defaultTitle) {
 
   const hasHtmlTables = container.querySelector('table') !== null;
 
-  elements.forEach((el) => {
+    elements.forEach((el) => {
     const isTable = el.tagName === 'TABLE';
+    const isTableImage = !isTable && el.tagName === 'IMG' && el.getAttribute('data-is-table-image') === 'true';
     const elSrc = el.src || el.getAttribute('src') || '';
     const altText = (el.getAttribute('alt') || el.getAttribute('title') || '').trim();
 
     // Skip redundant image placeholders representing tables if real HTML tables are present
-    if (!isTable && hasHtmlTables && /^(table|tbl)\b/i.test(altText)) {
+    if (!isTable && !isTableImage && hasHtmlTables && /^(table|tbl)\b/i.test(altText)) {
       return;
     }
 
-    const isVid = !isTable && (el.tagName === 'VIDEO'
+    const isVid = !isTable && !isTableImage && (el.tagName === 'VIDEO'
                  || el.getAttribute('data-is-video') === 'true'
                  || VIDEO_EXT_RE.test(elSrc));
 
     let figItem;
 
-    if (isTable) {
+    if (isTableImage) {
+      tableCounter++;
+      if (!el.id) el.id = `table-img-${tableCounter}`;
+      const caption = altText || `Table ${tableCounter}`;
+      figItem = {
+        isTable: true,
+        isTableImage: true,
+        isVideo: false,
+        isImage: false,
+        src: elSrc,
+        element: el,
+        caption: caption,
+        alt: altText,
+        tableNum: tableCounter,
+        index: currentFigureList.length
+      };
+    } else if (isTable) {
       tableCounter++;
       if (!el.id) el.id = `table-${tableCounter}`;
       const caption = el.querySelector('caption')?.innerText?.trim() || `Table ${tableCounter}`;
@@ -2674,14 +2703,16 @@ function processFigureAndTableLinks(container) {
   const figureMap = {};
 
   // 1. Build map for figure images — with separate counters for videos vs figures
-  let figCounter = 0;
+    let figCounter = 0;
   let videoCounter = 0;
   currentFigureList.forEach((item, index) => {
     // Generic index-based keys (fallback)
     const figNum = index + 1;
     figureMap[String(figNum)] = item;
 
-    if (item.isVideo) {
+    if (item.isTable) {
+      // Tables (real <table> or table-image) are mapped separately below
+    } else if (item.isVideo) {
       // Video-specific sequential keys
       videoCounter++;
       figureMap[`video ${videoCounter}`] = item;
@@ -2725,22 +2756,17 @@ function processFigureAndTableLinks(container) {
     }
   });
 
-  // 2. Build map for HTML tables
-  const tables = Array.from(container.querySelectorAll('table'));
-  tables.forEach((tbl, index) => {
-    const tblNum = index + 1;
-    if (!tbl.id) tbl.id = `table-${tblNum}`;
-
-    const caption = tbl.querySelector('caption')?.innerText?.trim() || `Table ${tblNum}`;
-    const tableData = {
-      isTable: true,
-      caption: caption,
-      element: tbl
-    };
-
-    figureMap[`table ${tblNum}`] = tableData;
-    figureMap[`tbl ${tblNum}`] = tableData;
-    figureMap[`tbl. ${tblNum}`] = tableData;
+   // 2. Build map for tables — pulls from currentFigureList so it covers BOTH
+  // real <table> elements and table-image screenshots, in correct document order.
+  const tableItemsInOrder = currentFigureList.filter(i => i.isTable);
+  tableItemsInOrder.forEach((tblItem) => {
+    const tblNum = tblItem.tableNum;
+    if (tblItem.element && !tblItem.element.id) {
+      tblItem.element.id = `table-${tblNum}`;
+    }
+    figureMap[`table ${tblNum}`] = tblItem;
+    figureMap[`tbl ${tblNum}`] = tblItem;
+    figureMap[`tbl. ${tblNum}`] = tblItem;
   });
 
   // 3. TreeWalker to process text nodes cleanly without breaking HTML structure
@@ -2830,11 +2856,11 @@ function processFigureAndTableLinks(container) {
           });
         }
 
-        if (!foundTarget && isTable) {
+                if (!foundTarget && isTable) {
           const tblIdx = parseInt(num, 10) - 1;
-          const allTables = Array.from(container.querySelectorAll('table'));
-          if (allTables[tblIdx]) {
-            foundTarget = { isTable: true, element: allTables[tblIdx], caption: `Table ${num}` };
+          const allTableItems = currentFigureList.filter(i => i.isTable);
+          if (allTableItems[tblIdx]) {
+            foundTarget = allTableItems[tblIdx];
           }
         }
 
@@ -3060,13 +3086,24 @@ function setupPanAndZoom() {
   if (zoomResetBtn) zoomResetBtn.addEventListener('click', resetImageTransform);
   if (rotateBtn) rotateBtn.addEventListener('click', () => { imgRotation = (imgRotation + 90) % 360; updateImageTransform(); });
   
-  if (openTabBtn) {
+    if (openTabBtn) {
     openTabBtn.addEventListener('click', () => {
       const item = (currentFigureList && currentFigureIndex >= 0) ? currentFigureList[currentFigureIndex] : null;
       if (item && item.isTable) {
-        const tblElem = document.getElementById('lb-table-viewport')?.querySelector('table') || item.element;
+        const lbViewport = document.getElementById('lb-table-viewport');
+        const tblElem = lbViewport?.querySelector('table');
+        const imgElem = lbViewport?.querySelector('img');
         if (tblElem) {
           openTableInNewTab(tblElem.outerHTML, item.caption || 'Medical Table');
+          return;
+        } else if (imgElem) {
+          openImageInNewTab(imgElem.src);
+          return;
+        } else if (item.element && item.element.tagName === 'IMG') {
+          openImageInNewTab(item.element.src);
+          return;
+        } else if (item.element) {
+          openTableInNewTab(item.element.outerHTML, item.caption || 'Medical Table');
           return;
         }
       }
@@ -3074,9 +3111,13 @@ function setupPanAndZoom() {
       const tableModal = document.getElementById('table-lightbox');
       if (tableModal && !tableModal.classList.contains('hidden') && standTableContent) {
         const tbl = standTableContent.querySelector('table');
+        const img = standTableContent.querySelector('img');
+        const title = document.getElementById('table-lightbox-title')?.innerText || 'Medical Table';
         if (tbl) {
-          const title = document.getElementById('table-lightbox-title')?.innerText || 'Medical Table';
           openTableInNewTab(tbl.outerHTML, title);
+          return;
+        } else if (img) {
+          openImageInNewTab(img.src);
           return;
         }
       }
@@ -3157,15 +3198,18 @@ function setupWindowControls() {
   const tblMax = document.getElementById('table-max-btn');
   const tblClose = document.getElementById('table-lightbox-close');
 
-  const openTableTabBtn = document.getElementById('open-table-tab-btn');
+    const openTableTabBtn = document.getElementById('open-table-tab-btn');
   if (openTableTabBtn) {
     openTableTabBtn.addEventListener('click', () => {
       const standTableContent = document.getElementById('table-lightbox-content');
       if (standTableContent) {
         const tbl = standTableContent.querySelector('table');
+        const img = standTableContent.querySelector('img');
+        const title = document.getElementById('table-lightbox-title')?.innerText || 'Medical Table';
         if (tbl) {
-          const title = document.getElementById('table-lightbox-title')?.innerText || 'Medical Table';
           openTableInNewTab(tbl.outerHTML, title);
+        } else if (img) {
+          openImageInNewTab(img.src);
         }
       }
     });
@@ -3404,6 +3448,18 @@ function openTableLightbox(tableElem, captionTitle) {
 
   if (tableTitle) tableTitle.innerText = captionTitle ? `${countLabel}: ${captionTitle}` : countLabel;
   if (tableContent && tableElem) {
+    if (tableElem.tagName === 'IMG') {
+      tableContent.innerHTML = '';
+      const imgClone = document.createElement('img');
+      imgClone.src = tableElem.src;
+      imgClone.style.maxWidth = '100%';
+      imgClone.style.height = 'auto';
+      imgClone.style.display = 'block';
+      imgClone.style.margin = '0 auto';
+      tableContent.appendChild(imgClone);
+      if (tableModal) tableModal.classList.remove('hidden');
+      return;
+    }
     const cleanTbl = tableElem.cloneNode(true);
     cleanTbl.removeAttribute('id');
     cleanTbl.removeAttribute('width');
@@ -3463,7 +3519,9 @@ function openLightbox(val, captionOverride, isNavigating = false) {
       if (rotateBtn) rotateBtn.classList.add('hidden');
       if (lightboxVid) lightboxVid.pause();
 
-      if (tblViewport && item.element) {
+            if (tblViewport && item.isTableImage && item.src) {
+        tblViewport.innerHTML = `<img src="${item.src}" style="max-width:100%; height:auto; display:block; margin:0 auto;">`;
+      } else if (tblViewport && item.element) {
         const cleanTbl = item.element.cloneNode(true);
         cleanTbl.removeAttribute('id');
         cleanTbl.style.display = 'table';

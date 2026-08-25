@@ -1030,7 +1030,7 @@ table.coursology-medical-table {
 }
 
 table.coursology-medical-table th {
-  background-color: #f1f5f9;
+  background-color: transparent;
   color: #0f172a;
   font-weight: 700;
   text-align: left;
@@ -1039,11 +1039,11 @@ table.coursology-medical-table th {
 }
 
 table.coursology-medical-table tr:nth-child(even) {
-  background-color: #f8fafc;
+  background-color: transparent;
 }
 
 table.coursology-medical-table tr:hover {
-  background-color: #f1f5f9;
+  background-color: transparent;
 }
 
 table.coursology-medical-table td {
@@ -1635,7 +1635,7 @@ table.coursology-medical-table td {
 
 .table-viewport th,
 .lb-table-viewport th {
-  background: #f1f5f9 !important;
+  background: transparent !important;
   font-weight: 600 !important;
   color: #0f172a !important;
   position: sticky !important;
@@ -1646,12 +1646,12 @@ table.coursology-medical-table td {
 
 .table-viewport tr:nth-child(even) td,
 .lb-table-viewport tr:nth-child(even) td {
-  background-color: #f8fafc !important;
+  background-color: transparent !important;
 }
 
 .table-viewport tr:hover td,
 .lb-table-viewport tr:hover td {
-  background-color: #f1f5f9 !important;
+  background-color: transparent !important;
 }
 
 /* Window Footer & Caption */
