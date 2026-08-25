@@ -234,6 +234,7 @@ const articleExpandAllBtn = document.getElementById('article-expand-all-btn');
 
 const mediaSidebar = document.getElementById('media-sidebar');
 const mediaFiguresGrid = document.getElementById('media-figures-grid');
+const mediaVideosGrid = document.getElementById('media-videos-grid');
 const mediaTablesGrid = document.getElementById('media-tables-grid');
 
 const lightbox = document.getElementById('lightbox');
@@ -2521,6 +2522,7 @@ function renderMediaSidebar(container) {
   if (!mediaSidebar || !mediaFiguresGrid || !mediaTablesGrid) return;
 
   mediaFiguresGrid.innerHTML = '';
+  if (mediaVideosGrid) mediaVideosGrid.innerHTML = '';
   mediaTablesGrid.innerHTML = '';
 
   const tableSvgIcon = `<svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="table" class="media-thumb-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M64 256l0-96 160 0 0 96L64 256zm0 64l160 0 0 96L64 416l0-96zm224 96l0-96 160 0 0 96-160 0zM448 256l-160 0 0-96 160 0 0 96zM64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32z"></path></svg>`;
@@ -2530,8 +2532,8 @@ function renderMediaSidebar(container) {
   const videosList = currentFigureList.filter(i => i.isVideo);
   const tablesList = currentFigureList.filter(i => i.isTable);
 
-  // Render Figures & Videos Section
-  if (figuresList.length === 0 && videosList.length === 0) {
+    // Render Figures Section
+  if (figuresList.length === 0) {
     mediaFiguresGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No figures</div>`;
   } else {
     figuresList.forEach((fig) => {
@@ -2548,21 +2550,28 @@ function renderMediaSidebar(container) {
       btn.onclick = () => openLightbox(fig.index);
       mediaFiguresGrid.appendChild(btn);
     });
+  }
 
-    videosList.forEach((vid) => {
-      const labelText = (vid.alt || `video ${vid.videoNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'media-thumb-btn';
-      btn.innerHTML = `
-        <div class="media-thumb-box" style="background:#eff6ff;display:flex;align-items:center;justify-content:center;">
-          ${videoPlayIcon}
-        </div>
-        <p class="media-thumb-label">${labelText}</p>
-      `;
-      btn.onclick = () => openLightbox(vid.index);
-      mediaFiguresGrid.appendChild(btn);
-    });
+  // Render Videos Section
+  if (mediaVideosGrid) {
+    if (videosList.length === 0) {
+      mediaVideosGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No videos</div>`;
+    } else {
+      videosList.forEach((vid) => {
+        const labelText = (vid.alt || `video ${vid.videoNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'media-thumb-btn';
+        btn.innerHTML = `
+          <div class="media-thumb-box" style="background:#eff6ff;display:flex;align-items:center;justify-content:center;">
+            ${videoPlayIcon}
+          </div>
+          <p class="media-thumb-label">${labelText}</p>
+        `;
+        btn.onclick = () => openLightbox(vid.index);
+        mediaVideosGrid.appendChild(btn);
+      });
+    }
   }
 
   // Render Tables Section
