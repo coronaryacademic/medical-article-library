@@ -277,6 +277,7 @@
         console.log(`[Coursology Extractor] Starting extraction. Found ${exhibitTriggers.length} exhibit triggers.`);
 
         let seqFigure = 0;
+        let seqImage = 0;
         let seqTable = 0;
         let seqVideo = 0;
 
@@ -343,19 +344,27 @@
                 popupTitle = (newImg.alt || newImg.title).trim();
             }
 
-            const isTable = newTable || /table|tbl/i.test(btnText) || /table|tbl/i.test(popupTitle);
+                        const isTable = newTable || /table|tbl/i.test(btnText) || /table|tbl/i.test(popupTitle);
             const isVideo = newVideo || /video|play/i.test(btnText) || /video/i.test(popupTitle);
+            const isImageKind = !isTable && !isVideo &&
+                (/\bimage\b|\bimg\.?\b/i.test(btnText) || /\bimage\b|\bimg\.?\b/i.test(popupTitle));
 
             let displayLabel = '';
+            let mediaKind = '';
             if (isTable) {
                 seqTable++;
                 displayLabel = `Table ${seqTable}`;
             } else if (isVideo) {
                 seqVideo++;
                 displayLabel = `Video ${seqVideo}`;
+            } else if (isImageKind) {
+                seqImage++;
+                displayLabel = `Image ${seqImage}`;
+                mediaKind = 'image';
             } else {
                 seqFigure++;
                 displayLabel = `Figure ${seqFigure}`;
+                mediaKind = 'figure';
             }
 
             if (newTable) {
@@ -379,8 +388,8 @@
                 }
                        } else if (newImg) {
                 const absSrc = new URL(newImg.getAttribute('src') || newImg.src, window.location.href).href;
-                capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable });
-                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable });
+                                capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind });
+                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind });
                 console.log(`[Coursology Extractor] Stored CDN image URL for ${displayLabel}: ${absSrc}`);
             } else {
                 console.log(`[Coursology Extractor] No popup table or image found in DOM for ${displayLabel}. Checking container fallback...`);
@@ -394,7 +403,7 @@
                 if (cdnMatch) {
                     const absSrc = cdnMatch[0];
                     const isVidCdn = /\.(?:mp4|webm|mov|m3u8)/i.test(absSrc);
-                    const assetObj = isVidCdn ? { videoSrc: absSrc, btnText, displayLabel } : { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable };
+                                        const assetObj = isVidCdn ? { videoSrc: absSrc, btnText, displayLabel } : { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind };
                     capturedPngMap.set(btn.id, assetObj);
                     capturedPngMap.set(btnText.toLowerCase(), assetObj);
                     console.log(`[Coursology Extractor] Stored CDN URL fallback for ${displayLabel}: ${absSrc}`);
@@ -497,7 +506,7 @@
                     imgFallbackIdx++;
                 }
 
-                     if (imgSrc) {
+                                     if (imgSrc) {
                     const imgEl = document.createElement('img');
                     imgEl.src = imgSrc;
                     imgEl.alt = labelToShow;
@@ -505,6 +514,9 @@
                     imgEl.setAttribute('data-exhibit-asset', 'true');
                     if (captured && captured.isTableImage) {
                         imgEl.setAttribute('data-is-table-image', 'true');
+                    }
+                    if (captured && captured.mediaKind) {
+                        imgEl.setAttribute('data-media-kind', captured.mediaKind);
                     }
                     imgEl.style.display = 'none';
                     hiddenAssetsContainer.appendChild(imgEl);

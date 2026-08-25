@@ -233,6 +233,7 @@ const articleCollapseAllBtn = document.getElementById('article-collapse-all-btn'
 const articleExpandAllBtn = document.getElementById('article-expand-all-btn');
 
 const mediaSidebar = document.getElementById('media-sidebar');
+const mediaImagesGrid = document.getElementById('media-images-grid');
 const mediaFiguresGrid = document.getElementById('media-figures-grid');
 const mediaVideosGrid = document.getElementById('media-videos-grid');
 const mediaTablesGrid = document.getElementById('media-tables-grid');
@@ -2521,6 +2522,7 @@ function expandAllArticleSections() {
 function renderMediaSidebar(container) {
   if (!mediaSidebar || !mediaFiguresGrid || !mediaTablesGrid) return;
 
+  if (mediaImagesGrid) mediaImagesGrid.innerHTML = '';
   mediaFiguresGrid.innerHTML = '';
   if (mediaVideosGrid) mediaVideosGrid.innerHTML = '';
   mediaTablesGrid.innerHTML = '';
@@ -2528,12 +2530,35 @@ function renderMediaSidebar(container) {
   const tableSvgIcon = `<svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="table" class="media-thumb-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M64 256l0-96 160 0 0 96L64 256zm0 64l160 0 0 96L64 416l0-96zm224 96l0-96 160 0 0 96-160 0zM448 256l-160 0 0-96 160 0 0 96zM64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32z"></path></svg>`;
   const videoPlayIcon = `<svg viewBox="0 0 24 24" fill="currentColor" class="media-thumb-icon" style="color:#2563eb;width:36px;height:36px;"><path d="M8 5v14l11-7z"/></svg>`;
 
-  const figuresList = currentFigureList.filter(i => i.isImage);
+    const imagesList = currentFigureList.filter(i => i.isImage && i.mediaKind === 'image');
+  const figuresList = currentFigureList.filter(i => i.isImage && i.mediaKind !== 'image');
   const videosList = currentFigureList.filter(i => i.isVideo);
   const tablesList = currentFigureList.filter(i => i.isTable);
 
-    // Render Figures Section
-  if (figuresList.length === 0) {
+    // Render Images Section
+  if (mediaImagesGrid) {
+    if (imagesList.length === 0) {
+      mediaImagesGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No images</div>`;
+    } else {
+      imagesList.forEach((imgItem) => {
+        const labelText = (imgItem.alt || `image ${imgItem.imageNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'media-thumb-btn';
+        btn.innerHTML = `
+          <div class="media-thumb-box">
+            <img src="${imgItem.src}" alt="${labelText}" loading="lazy" class="media-thumb-img">
+          </div>
+          <p class="media-thumb-label">${labelText}</p>
+        `;
+        btn.onclick = () => openLightbox(imgItem.index);
+        mediaImagesGrid.appendChild(btn);
+      });
+    }
+  }
+
+  // Render Figures & Videos Section
+  if (figuresList.length === 0 && videosList.length === 0) {
     mediaFiguresGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No figures</div>`;
   } else {
     figuresList.forEach((fig) => {
@@ -2606,13 +2631,14 @@ function setupLightboxGallery(container, defaultTitle) {
   const VIDEO_EXT_RE = /\.(mp4|webm|mov|m3u8|ogg)(\?.*)?$/i;
   const elements = Array.from(container.querySelectorAll('img, video, table'));
   
-  let figCounter = 0;
+   let figCounter = 0;
+  let imageCounter = 0;
   let videoCounter = 0;
   let tableCounter = 0;
 
   const hasHtmlTables = container.querySelector('table') !== null;
 
-    elements.forEach((el) => {
+  elements.forEach((el) => {
     const isTable = el.tagName === 'TABLE';
     const isTableImage = !isTable && el.tagName === 'IMG' && el.getAttribute('data-is-table-image') === 'true';
     const elSrc = el.src || el.getAttribute('src') || '';
@@ -2626,6 +2652,12 @@ function setupLightboxGallery(container, defaultTitle) {
     const isVid = !isTable && !isTableImage && (el.tagName === 'VIDEO'
                  || el.getAttribute('data-is-video') === 'true'
                  || VIDEO_EXT_RE.test(elSrc));
+
+    // "Image" (photo/x-ray) vs "Figure" (diagram) — read the extractor's tag,
+    // fall back to the alt/caption wording for older data.
+    const declaredKind = (!isTable && !isTableImage && !isVid) ? (el.getAttribute('data-media-kind') || '') : '';
+    const isImageKind = declaredKind === 'image' ||
+      (!declaredKind && /^\(?\s*image\b|^\(?\s*img\.?\b/i.test(altText));
 
     let figItem;
 
@@ -2675,6 +2707,23 @@ function setupLightboxGallery(container, defaultTitle) {
         videoNum: videoCounter,
         index: currentFigureList.length
       };
+        } else if (isImageKind) {
+      imageCounter++;
+      const caption = altText || `Image ${imageCounter}: ${defaultTitle}`;
+      el.setAttribute('data-exhibit-asset', 'true');
+      if (!el.id) el.id = `media-asset-img-${imageCounter}`;
+      figItem = {
+        isImage: true,
+        isVideo: false,
+        isTable: false,
+        mediaKind: 'image',
+        src: elSrc,
+        caption: caption,
+        element: el,
+        alt: altText,
+        imageNum: imageCounter,
+        index: currentFigureList.length
+      };
     } else {
       figCounter++;
       const caption = altText || `Figure ${figCounter}: ${defaultTitle}`;
@@ -2684,6 +2733,7 @@ function setupLightboxGallery(container, defaultTitle) {
         isImage: true,
         isVideo: false,
         isTable: false,
+        mediaKind: 'figure',
         src: elSrc,
         caption: caption,
         element: el,
@@ -2709,36 +2759,35 @@ function processFigureAndTableLinks(container) {
     }
   });
 
-  const figureMap = {};
+    const figureMap = {};
 
-  // 1. Build map for figure images — with separate counters for videos vs figures
-    let figCounter = 0;
-  let videoCounter = 0;
+  // 1. Build map using each item's OWN sequence number (assigned in
+  // setupLightboxGallery), keyed separately per kind so "Image N" and
+  // "Figure N" can never collide or overwrite each other.
   currentFigureList.forEach((item, index) => {
-    // Generic index-based keys (fallback)
+    // Generic index-based key (fallback only)
     const figNum = index + 1;
     figureMap[String(figNum)] = item;
 
-    if (item.isTable) {
-      // Tables (real <table> or table-image) are mapped separately below
-    } else if (item.isVideo) {
-      // Video-specific sequential keys
-      videoCounter++;
-      figureMap[`video ${videoCounter}`] = item;
-      figureMap[`vid ${videoCounter}`] = item;
-      figureMap[`video ${figNum}`] = item; // also by absolute index
-    } else {
-      // Figure/image sequential keys
-      figCounter++;
-      figureMap[`figure ${figCounter}`] = item;
-      figureMap[`fig ${figCounter}`] = item;
-      figureMap[`fig. ${figCounter}`] = item;
-      figureMap[`image ${figCounter}`] = item;
-      figureMap[`img ${figCounter}`] = item;
-      figureMap[`img. ${figCounter}`] = item;
-      figureMap[`exhibit ${figCounter}`] = item;
-      figureMap[`figure ${figNum}`] = item;
-      figureMap[`image ${figNum}`] = item;
+    if (item.isVideo) {
+      const vNum = item.videoNum || figNum;
+      figureMap[`video ${vNum}`] = item;
+      figureMap[`vid ${vNum}`] = item;
+    } else if (item.mediaKind === 'image') {
+      const iNum = item.imageNum || figNum;
+      figureMap[`image ${iNum}`] = item;
+      figureMap[`img ${iNum}`] = item;
+      figureMap[`img. ${iNum}`] = item;
+    } else if (!item.isTable) {
+      // Real figures, and legacy items with no mediaKind (old extractions)
+      const fNum = item.figNum || figNum;
+      figureMap[`figure ${fNum}`] = item;
+      figureMap[`fig ${fNum}`] = item;
+      figureMap[`fig. ${fNum}`] = item;
+      figureMap[`exhibit ${fNum}`] = item;
+      // Legacy fallback only — don't clobber a real Image N if one already exists
+      if (!figureMap[`image ${fNum}`]) figureMap[`image ${fNum}`] = item;
+      if (!figureMap[`img ${fNum}`]) figureMap[`img ${fNum}`] = item;
     }
 
     if (item.alt) {
@@ -2747,17 +2796,23 @@ function processFigureAndTableLinks(container) {
         const keyNum = match[1].toLowerCase();
         const isTab = match[0].toLowerCase().startsWith('tab');
         const isVidAlt = match[0].toLowerCase().startsWith('vid');
-        const prefixStr = isTab ? 'table ' : isVidAlt ? 'video ' : 'figure ';
-        figureMap[`${prefixStr}${keyNum}`] = item;
-        figureMap[`image ${keyNum}`] = item;
-        figureMap[`img ${keyNum}`] = item;
-        figureMap[`img. ${keyNum}`] = item;
+        const isImgAlt = /^(image|img)/i.test(match[0]);
+
         if (isTab) {
+          figureMap[`table ${keyNum}`] = item;
           figureMap[`tbl ${keyNum}`] = item;
           figureMap[`tbl. ${keyNum}`] = item;
         } else if (isVidAlt) {
+          figureMap[`video ${keyNum}`] = item;
           figureMap[`vid ${keyNum}`] = item;
+        } else if (isImgAlt || item.mediaKind === 'image') {
+          // Only claim "image N" — never also write "figure N" for this item
+          figureMap[`image ${keyNum}`] = item;
+          figureMap[`img ${keyNum}`] = item;
+          figureMap[`img. ${keyNum}`] = item;
         } else {
+          // Only claim "figure N" — never also write "image N" for this item
+          figureMap[`figure ${keyNum}`] = item;
           figureMap[`fig ${keyNum}`] = item;
           figureMap[`fig. ${keyNum}`] = item;
         }
@@ -2806,7 +2861,8 @@ function processFigureAndTableLinks(container) {
 
   const figRegex = /(?:\(\(|\(|\[)?\s*\b(Figure|Fig\.?|Table|Tbl\.?|Image|Img\.?|Exhibit|Video|Vid\.?)\s*(\d+[A-Za-z]?)\b\s*(?:\)\)|\)|\])?/gi;
 
-  const cameraIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/></svg>`;
+  const cameraIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 512 512" fill="currentColor"><path d="M64 64c0-17.7-14.3-32-32-32S0 46.3 0 64L0 400c0 44.2 35.8 80 80 80l400 0c17.7 0 32-14.3 32-32s-14.3-32-32-32L80 416c-8.8 0-16-7.2-16-16L64 64zm406.6 86.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L320 210.7l-57.4-57.4c-12.5-12.5-32.8-12.5-45.3 0l-112 112c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L240 221.3l57.4 57.4c12.5 12.5 32.8 12.5 45.3 0l128-128z"/></svg>`;
+  const imageIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 512 512" fill="currentColor"><path d="M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6l96 0 32 0 208 0c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/></svg>`;
   const tableIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 4v4h7V7H4zm9 0v4h7V7h-7zm-9 6v4h7v-4H4zm9 0v4h7v-4h-7z"/></svg>`;
   const videoIconSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
 
@@ -2830,6 +2886,7 @@ function processFigureAndTableLinks(container) {
       const prefixLc = prefix.toLowerCase();
       const isTable = prefixLc.startsWith('tab');
       const isVideo = prefixLc.startsWith('vid');
+      const isImageLabel = prefixLc.startsWith('image') || prefixLc.startsWith('img');
       const cleanLabel = `${prefix} ${num}`;
 
       const keyLower = `${prefixLc} ${num.toLowerCase()}`;
@@ -2842,11 +2899,11 @@ function processFigureAndTableLinks(container) {
         || figureMap[`tbl ${num.toLowerCase()}`]
         || figureMap[num.toLowerCase()];
 
-      // Create High-Fidelity Exhibit Button
+            // Create High-Fidelity Exhibit Button
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = isTable ? 'exhibit-btn table-link' : 'exhibit-btn';
-      const btnIcon = isTable ? tableIconSvg : isVideo ? videoIconSvg : cameraIconSvg;
+      const btnIcon = isTable ? tableIconSvg : isVideo ? videoIconSvg : isImageLabel ? imageIconSvg : cameraIconSvg;
       btn.innerHTML = `<span class="ex-paren">(</span>${btnIcon}<span class="ex-label">${cleanLabel}</span><span class="ex-paren">)</span>`;
       btn.title = `Click to view (${cleanLabel}) popup`;
 
@@ -3513,9 +3570,10 @@ function openLightbox(val, captionOverride, isNavigating = false) {
     const lbToolbar = document.getElementById('lb-toolbar');
     const lightboxVid = document.getElementById('lightbox-video');
 
-    // Calculate category totals and positions
+        // Calculate category totals and positions
     const videosList = currentFigureList.filter(i => i.isVideo);
-    const figuresList = currentFigureList.filter(i => i.isImage || (!i.isVideo && !i.isTable));
+    const imagesList = currentFigureList.filter(i => i.isImage && i.mediaKind === 'image');
+    const figuresList = currentFigureList.filter(i => i.isImage && i.mediaKind !== 'image');
     const tablesList = currentFigureList.filter(i => i.isTable);
 
     const rotateBtn = document.getElementById('tool-rotate');
@@ -3566,7 +3624,7 @@ function openLightbox(val, captionOverride, isNavigating = false) {
 
     lightboxCaption.innerText = item.caption || '';
 
-    // Calculate category specific index/total
+       // Calculate category specific index/total
     let countText = '';
     if (item.isTable) {
       const tIdx = tablesList.indexOf(item) + 1;
@@ -3574,6 +3632,9 @@ function openLightbox(val, captionOverride, isNavigating = false) {
     } else if (item.isVideo) {
       const vIdx = videosList.indexOf(item) + 1;
       countText = `Video ${vIdx > 0 ? vIdx : 1} of ${videosList.length}`;
+    } else if (item.mediaKind === 'image') {
+      const iIdx = imagesList.indexOf(item) + 1;
+      countText = `Image ${iIdx > 0 ? iIdx : 1} of ${imagesList.length}`;
     } else {
       const fIdx = figuresList.indexOf(item) + 1;
       countText = `Figure ${fIdx > 0 ? fIdx : 1} of ${figuresList.length}`;
