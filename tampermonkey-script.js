@@ -75,6 +75,12 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    function isPlaceholderImage(src) {
+    if (!src) return true;
+    if (src.startsWith('data:image/gif;base64,') && src.length < 150) return true;
+    return false;
+    }
+
 
     // ─── Turndown Config ────────────────────────────────────────────────────
     function createTurndownInstance() {
@@ -321,10 +327,12 @@
                    || document.querySelector('[role="dialog"] video')
                    || document.querySelector('[role="dialog"] source');
 
-                newImg = imgsAfter.find(img => !imgsBefore.has(img.src) && img.src.includes('coursology'))
-                      || imgsAfter.find(img => !imgsBefore.has(img.src) && !img.src.includes('logo'))
-                      || document.querySelector('[data-is-open="true"] img')
-                      || document.querySelector('[role="dialog"] img');
+                newImg = imgsAfter.find(img => !imgsBefore.has(img.src) && img.src.includes('coursology') && !isPlaceholderImage(img.src))
+                || imgsAfter.find(img => !imgsBefore.has(img.src) && !img.src.includes('logo') && !isPlaceholderImage(img.src))
+                || [
+                    document.querySelector('[data-is-open="true"] img'),
+                    document.querySelector('[role="dialog"] img')
+                    ].find(el => el && !isPlaceholderImage(el.src));
 
                 if (newTable || newVideo || newImg) {
                     console.log(`[Coursology Extractor] Detected popup content on attempt ${attempt}!`);
@@ -387,11 +395,20 @@
                     console.log(`[Coursology Extractor] SUCCESS: Stored CDN Video URL for ${displayLabel}: ${absSrc}`);
                 }
                        } else if (newImg) {
-                const absSrc = new URL(newImg.getAttribute('src') || newImg.src, window.location.href).href;
-                                capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind });
-                capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind });
-                console.log(`[Coursology Extractor] Stored CDN image URL for ${displayLabel}: ${absSrc}`);
-            } else {
+    let rawImgSrc = newImg.getAttribute('src') || newImg.src;
+    if (isPlaceholderImage(rawImgSrc)) {
+        rawImgSrc = newImg.getAttribute('data-src') || newImg.getAttribute('data-lazy-src')
+                 || newImg.getAttribute('data-original') || rawImgSrc;
+    }
+    if (isPlaceholderImage(rawImgSrc)) {
+        console.log(`[Coursology Extractor] Only a lazy-load placeholder found for ${displayLabel}, skipping.`);
+    } else {
+        const absSrc = new URL(rawImgSrc, window.location.href).href;
+        capturedPngMap.set(btn.id, { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind });
+        capturedPngMap.set(btnText.toLowerCase(), { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind });
+        console.log(`[Coursology Extractor] Stored CDN image URL for ${displayLabel}: ${absSrc}`);
+    }
+} else {
                 console.log(`[Coursology Extractor] No popup table or image found in DOM for ${displayLabel}. Checking container fallback...`);
             }
 
@@ -462,8 +479,7 @@
         // Keep native subheadings clean without altering paragraph text
 
         // 5. Replace exhibit buttons in clone with inline text references, and isolate hidden assets at the end
-        const exhibitButtonsInClone = Array.from(clone.querySelectorAll('button[id^="exhibit-"]'));
-        let imgFallbackIdx = 0;
+                const exhibitButtonsInClone = Array.from(clone.querySelectorAll('button[id^="exhibit-"]'));
 
         const hiddenAssetsContainer = document.createElement('div');
         hiddenAssetsContainer.setAttribute('data-exhibit-assets', 'true');
@@ -497,16 +513,10 @@
                 videoEl.setAttribute('data-is-video', 'true');
                 videoEl.style.display = 'none';
                 hiddenAssetsContainer.appendChild(videoEl);
-            } else {
-                let imgSrc = '';
-                if (captured && captured.imgSrc) {
-                    imgSrc = captured.imgSrc;
-                } else if (!captured && pageMediaUrls[imgFallbackIdx]) {
-                    imgSrc = new URL(pageMediaUrls[imgFallbackIdx], window.location.href).href;
-                    imgFallbackIdx++;
-                }
+                        } else {
+                const imgSrc = (captured && captured.imgSrc) ? captured.imgSrc : '';
 
-                                     if (imgSrc) {
+                if (imgSrc) {
                     const imgEl = document.createElement('img');
                     imgEl.src = imgSrc;
                     imgEl.alt = labelToShow;
@@ -534,16 +544,24 @@
 
         // 5. Resolve all remaining images in clone to clean CDN URLs
         const remainingImgs = Array.from(clone.querySelectorAll('img'));
-        for (const img of remainingImgs) {
-            const src = img.getAttribute('src') || img.getAttribute('data-src') || img.src;
-            if (src && !src.startsWith('data:')) {
-                const absUrl = new URL(src, window.location.href).href;
-                img.src = absUrl;
-                img.setAttribute('data-cdn-src', absUrl);
-                img.removeAttribute('srcset');
-                img.removeAttribute('data-src');
-            }
-        }
+for (const img of remainingImgs) {
+    let src = img.getAttribute('src') || img.getAttribute('data-src') || img.src;
+    if (isPlaceholderImage(src)) {
+        src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src')
+           || img.getAttribute('data-original') || '';
+    }
+    if (isPlaceholderImage(src) || !src) {
+        img.remove();
+        continue;
+    }
+    if (!src.startsWith('data:')) {
+        const absUrl = new URL(src, window.location.href).href;
+        img.src = absUrl;
+        img.setAttribute('data-cdn-src', absUrl);
+        img.removeAttribute('srcset');
+        img.removeAttribute('data-src');
+    }
+}
 
               // 6. Convert to Markdown
         let markdownBody = turndownService.turndown(clone.innerHTML);

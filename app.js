@@ -45,6 +45,12 @@ function openDB() {
   });
 }
 
+function isPlaceholderImage(src) {
+  if (!src) return true;
+  if (src.startsWith('data:image/gif;base64,') && src.length < 150) return true;
+  return false;
+}
+
 async function dbGetAll() {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -2555,7 +2561,7 @@ function renderMediaSidebar(container) {
     if (imagesList.length === 0) {
       mediaImagesGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No images</div>`;
     } else {
-      imagesList.forEach((imgItem) => {
+            imagesList.forEach((imgItem) => {
         const labelText = (imgItem.alt || `image ${imgItem.imageNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -2566,6 +2572,8 @@ function renderMediaSidebar(container) {
           </div>
           <p class="media-thumb-label">${labelText}</p>
         `;
+        const thumbImg = btn.querySelector('img.media-thumb-img');
+        if (thumbImg) thumbImg.onerror = () => btn.remove();
         btn.onclick = () => openLightbox(imgItem.index);
         mediaImagesGrid.appendChild(btn);
       });
@@ -2576,7 +2584,7 @@ function renderMediaSidebar(container) {
   if (figuresList.length === 0 && videosList.length === 0) {
     mediaFiguresGrid.innerHTML = `<div class="empty-media-msg" style="font-size:0.85rem; color:#94a3b8; padding:4px 0; font-style:italic; font-weight:500;">No figures</div>`;
   } else {
-    figuresList.forEach((fig) => {
+        figuresList.forEach((fig) => {
       const labelText = (fig.alt || `figure ${fig.figNum || 1}`).replace(/^[\(\[\s]+|[\)\]\s]+$/g, '');
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -2587,6 +2595,8 @@ function renderMediaSidebar(container) {
         </div>
         <p class="media-thumb-label">${labelText}</p>
       `;
+      const thumbImg = btn.querySelector('img.media-thumb-img');
+      if (thumbImg) thumbImg.onerror = () => btn.remove();
       btn.onclick = () => openLightbox(fig.index);
       mediaFiguresGrid.appendChild(btn);
     });
@@ -2650,6 +2660,7 @@ function setupLightboxGallery(container, defaultTitle) {
   let imageCounter = 0;
   let videoCounter = 0;
   let tableCounter = 0;
+  const seenMediaSrcs = new Set(); // dedupe identical images/videos so "ghost" duplicates never appear
 
   const hasHtmlTables = container.querySelector('table') !== null;
 
@@ -2658,6 +2669,21 @@ function setupLightboxGallery(container, defaultTitle) {
     const isTableImage = !isTable && el.tagName === 'IMG' && el.getAttribute('data-is-table-image') === 'true';
     const elSrc = el.src || el.getAttribute('src') || '';
     const altText = (el.getAttribute('alt') || el.getAttribute('title') || '').trim();
+
+    // Skip broken/empty ghost entries — an image or video with no real source
+    // renders as a blank gray placeholder in the media sidebar, so drop it entirely.
+   if (!isTable) {
+      const cleanSrc = elSrc.trim();
+      if (!cleanSrc || cleanSrc === window.location.href || isPlaceholderImage(cleanSrc)) {
+        return;
+      }
+      // Dedupe: if this exact src was already added as a gallery item, skip the
+      // repeat (this is what produces the duplicate "figure 1 / figure 1" rows).
+      if (seenMediaSrcs.has(cleanSrc)) {
+        return;
+      }
+      seenMediaSrcs.add(cleanSrc);
+    }
 
     // Skip redundant image placeholders representing tables if real HTML tables are present
     if (!isTable && !isTableImage && hasHtmlTables && /^(table|tbl)\b/i.test(altText)) {
