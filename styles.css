@@ -1424,6 +1424,28 @@ table.coursology-medical-table td li:last-child {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
 }
 
+/* Audio Viewport */
+.lb-audio-viewport {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  min-height: 0;
+  background: #f0fdf4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.lb-audio-viewport audio {
+  width: 100%;
+  max-width: 560px;
+  border-radius: 999px;
+  outline: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
 /* Table Viewport */
 .lb-table-viewport {
   position: relative;

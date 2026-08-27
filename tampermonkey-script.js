@@ -185,11 +185,11 @@
             }
         });
 
-        // Hidden exhibit media assets (img, video) preserved as raw HTML blocks
+                // Hidden exhibit media assets (img, video, audio) preserved as raw HTML blocks
         turndownService.addRule('preserveExhibitMediaAssets', {
             filter: function(node) {
                 const tag = node.tagName ? node.tagName.toLowerCase() : '';
-                return (tag === 'img' || tag === 'video') && node.getAttribute('data-exhibit-asset') === 'true';
+                return (tag === 'img' || tag === 'video' || tag === 'audio') && node.getAttribute('data-exhibit-asset') === 'true';
             },
             replacement: function(content, node) {
                 return '\n\n' + node.outerHTML + '\n\n';
@@ -322,6 +322,7 @@
         let seqImage = 0;
         let seqTable = 0;
         let seqVideo = 0;
+        let seqAudio = 0;
 
         for (let i = 0; i < exhibitTriggers.length; i++) {
             const btn = exhibitTriggers[i];
@@ -330,38 +331,45 @@
 
             console.log(`\n--- [Exhibit ${i + 1}/${exhibitTriggers.length}] ${btnText} (ID: ${btn.id}) ---`);
 
-            // Snapshot DOM state before clicking
+                        // Snapshot DOM state before clicking
             const tablesBefore = Array.from(document.querySelectorAll('table'));
             const imgsBefore = new Set(Array.from(document.querySelectorAll('img')).map(img => img.src));
+            const videosBefore = new Set(Array.from(document.querySelectorAll('video')));
+            const audiosBefore = new Set(Array.from(document.querySelectorAll('audio')));
 
             // Trigger click on element and parent wrappers
             triggerClick(btn);
 
             let newTable = null;
             let newVideo = null;
+            let newAudio = null;
             let newImg = null;
 
-            // Poll DOM up to 4 times (1.2s max) to detect newly mounted table, video, or image
+            // Poll DOM up to 4 times (1.2s max) to detect newly mounted table, video, audio, or image
             for (let attempt = 1; attempt <= 4; attempt++) {
                 await sleep(300);
 
                 const tablesAfter = Array.from(document.querySelectorAll('table'));
                 const imgsAfter = Array.from(document.querySelectorAll('img'));
-                const videosAfter = Array.from(document.querySelectorAll('video, video source, iframe'));
+                const videosAfter = Array.from(document.querySelectorAll('video'));
+                const audiosAfter = Array.from(document.querySelectorAll('audio'));
 
                 newTable = tablesAfter.find(t => !tablesBefore.includes(t)) 
                         || document.querySelector('[data-is-open="true"] table')
                         || document.querySelector('[role="dialog"] table')
                         || document.querySelector('table');
 
-                newVideo = videosAfter.find(v => {
-                    const src = v.getAttribute('src') || v.src || '';
-                    return src.includes('coursology') || src.includes('.mp4') || src.includes('.webm') || src.includes('.mov') || src.includes('.m3u8');
-                }) || document.querySelector('[data-is-open="true"] video')
-                   || document.querySelector('[data-is-open="true"] source')
-                   || document.querySelector('[data-is-open="true"] iframe')
+                // Diff-based: catches <video src="..."> AND <video><source src="..."></video>
+                newVideo = videosAfter.find(v => !videosBefore.has(v))
+                   || document.querySelector('[data-is-open="true"] video')
                    || document.querySelector('[role="dialog"] video')
-                   || document.querySelector('[role="dialog"] source');
+                   || document.querySelector('video');
+
+                // Diff-based: catches <audio src="..."> AND <audio><source src="..."></audio>
+                newAudio = audiosAfter.find(a => !audiosBefore.has(a))
+                   || document.querySelector('[data-is-open="true"] audio')
+                   || document.querySelector('[role="dialog"] audio')
+                   || document.querySelector('audio');
 
                 newImg = imgsAfter.find(img => !imgsBefore.has(img.src) && img.src.includes('coursology') && !isPlaceholderImage(img.src))
                 || imgsAfter.find(img => !imgsBefore.has(img.src) && !img.src.includes('logo') && !isPlaceholderImage(img.src))
@@ -370,7 +378,7 @@
                     document.querySelector('[role="dialog"] img')
                     ].find(el => el && !isPlaceholderImage(el.src));
 
-                if (newTable || newVideo || newImg) {
+                if (newTable || newVideo || newAudio || newImg) {
                     console.log(`[Coursology Extractor] Detected popup content on attempt ${attempt}!`);
                     break;
                 }
@@ -388,9 +396,10 @@
                 popupTitle = (newImg.alt || newImg.title).trim();
             }
 
-                        const isTable = newTable || /table|tbl/i.test(btnText) || /table|tbl/i.test(popupTitle);
+                                                const isTable = newTable || /table|tbl/i.test(btnText) || /table|tbl/i.test(popupTitle);
             const isVideo = newVideo || /video|play/i.test(btnText) || /video/i.test(popupTitle);
-            const isImageKind = !isTable && !isVideo &&
+            const isAudio = !isVideo && (newAudio || /audio|sound|listen/i.test(btnText) || /audio/i.test(popupTitle));
+            const isImageKind = !isTable && !isVideo && !isAudio &&
                 (/\bimage\b|\bimg\.?\b/i.test(btnText) || /\bimage\b|\bimg\.?\b/i.test(popupTitle));
 
             let displayLabel = '';
@@ -398,9 +407,12 @@
             if (isTable) {
                 seqTable++;
                 displayLabel = `Table ${seqTable}`;
-            } else if (isVideo) {
+                        } else if (isVideo) {
                 seqVideo++;
                 displayLabel = `Video ${seqVideo}`;
+            } else if (isAudio) {
+                seqAudio++;
+                displayLabel = `Audio ${seqAudio}`;
             } else if (isImageKind) {
                 seqImage++;
                 displayLabel = `Image ${seqImage}`;
@@ -430,6 +442,18 @@
                     capturedPngMap.set(btnText.toLowerCase(), { videoSrc: absSrc, btnText, displayLabel });
                     console.log(`[Coursology Extractor] SUCCESS: Stored CDN Video URL for ${displayLabel}: ${absSrc}`);
                 }
+                                   } else if (newAudio) {
+                let aSrc = newAudio.getAttribute('src') || newAudio.src || '';
+                if (!aSrc && newAudio.tagName.toLowerCase() === 'audio') {
+                    const sourceChild = newAudio.querySelector('source');
+                    if (sourceChild) aSrc = sourceChild.getAttribute('src') || sourceChild.src || '';
+                }
+                if (aSrc) {
+                    const absSrc = new URL(aSrc, window.location.href).href;
+                    capturedPngMap.set(btn.id, { audioSrc: absSrc, btnText, displayLabel });
+                    capturedPngMap.set(btnText.toLowerCase(), { audioSrc: absSrc, btnText, displayLabel });
+                    console.log(`[Coursology Extractor] SUCCESS: Stored CDN Audio URL for ${displayLabel}: ${absSrc}`);
+                }
                        } else if (newImg) {
     let rawImgSrc = newImg.getAttribute('src') || newImg.src;
     if (isPlaceholderImage(rawImgSrc)) {
@@ -452,11 +476,14 @@
             if (!capturedPngMap.has(btn.id)) {
                 const btnContainer = btn.closest('[data-is-open]') || btn.parentElement || btn;
                 const containerHtml = btnContainer ? btnContainer.outerHTML : '';
-                const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:mp4|webm|mov|m3u8|png|jpg|jpeg|webp|gif|svg)/i);
+                               const cdnMatch = containerHtml.match(/https:\/\/cdn\.coursology-qbank\.com\/media\/[a-zA-Z0-9_\-\.]+\.(?:mp4|webm|mov|m3u8|mp3|wav|m4a|aac|png|jpg|jpeg|webp|gif|svg)/i);
                 if (cdnMatch) {
                     const absSrc = cdnMatch[0];
-                    const isVidCdn = /\.(?:mp4|webm|mov|m3u8)/i.test(absSrc);
-                                        const assetObj = isVidCdn ? { videoSrc: absSrc, btnText, displayLabel } : { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind };
+                    const isVidCdn = /\.(?:mp4|webm|mov|m3u8)$/i.test(absSrc);
+                    const isAudCdn = /\.(?:mp3|wav|m4a|aac)$/i.test(absSrc);
+                                        const assetObj = isVidCdn ? { videoSrc: absSrc, btnText, displayLabel }
+                                        : isAudCdn ? { audioSrc: absSrc, btnText, displayLabel }
+                                        : { imgSrc: absSrc, btnText, displayLabel, isTableImage: isTable, mediaKind };
                     capturedPngMap.set(btn.id, assetObj);
                     capturedPngMap.set(btnText.toLowerCase(), assetObj);
                     console.log(`[Coursology Extractor] Stored CDN URL fallback for ${displayLabel}: ${absSrc}`);
@@ -540,7 +567,7 @@
                 cleanTbl.setAttribute('data-exhibit-asset', 'true');
                 cleanTbl.style.display = 'none';
                 hiddenAssetsContainer.appendChild(cleanTbl);
-            } else if (captured && captured.videoSrc) {
+                        } else if (captured && captured.videoSrc) {
                 const videoEl = document.createElement('video');
                 videoEl.src = captured.videoSrc;
                 videoEl.controls = true;
@@ -549,6 +576,15 @@
                 videoEl.setAttribute('data-is-video', 'true');
                 videoEl.style.display = 'none';
                 hiddenAssetsContainer.appendChild(videoEl);
+            } else if (captured && captured.audioSrc) {
+                const audioEl = document.createElement('audio');
+                audioEl.src = captured.audioSrc;
+                audioEl.controls = true;
+                audioEl.className = 'article-media-asset';
+                audioEl.setAttribute('data-exhibit-asset', 'true');
+                audioEl.setAttribute('data-is-audio', 'true');
+                audioEl.style.display = 'none';
+                hiddenAssetsContainer.appendChild(audioEl);
                         } else {
                 const imgSrc = (captured && captured.imgSrc) ? captured.imgSrc : '';
 

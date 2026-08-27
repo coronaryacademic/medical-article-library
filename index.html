@@ -207,9 +207,13 @@
         <h3 class="media-section-title">FIGURES</h3>
         <div id="media-figures-grid" class="media-grid"></div>
       </section>
-      <section class="media-section">
+          <section class="media-section">
         <h3 class="media-section-title">VIDEOS</h3>
         <div id="media-videos-grid" class="media-grid"></div>
+      </section>
+      <section class="media-section">
+        <h3 class="media-section-title">AUDIO</h3>
+        <div id="media-audios-grid" class="media-grid"></div>
       </section>
       <section class="media-section">
         <h3 class="media-section-title">TABLES</h3>
@@ -273,9 +277,14 @@
         <img id="lightbox-img" src="" alt="Enlarged Diagram" draggable="false">
       </div>
 
-      <!-- Video Viewport (shown only for videos) -->
+            <!-- Video Viewport (shown only for videos) -->
       <div id="lb-video-viewport" class="lb-video-viewport hidden">
         <video id="lightbox-video" controls playsinline></video>
+      </div>
+
+      <!-- Audio Viewport (shown only for audio) -->
+      <div id="lb-audio-viewport" class="lb-audio-viewport hidden">
+        <audio id="lightbox-audio" controls style="width:100%; margin:auto;"></audio>
       </div>
 
       <!-- Table Viewport (shown only for tables) -->
