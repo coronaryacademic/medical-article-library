@@ -1051,6 +1051,18 @@ table.coursology-medical-table td {
   border-bottom: 1px solid #e2e8f0;
 }
 
+table.coursology-medical-table td .arrow-glyph {
+  display: inline-flex;
+  vertical-align: middle;
+  color: #000000;
+}
+
+table.coursology-medical-table td .arrow-glyph svg {
+  width: 1em;
+  height: 1.3em;
+  font-size: inherit;
+}
+
 /* Bulleted lists inside medical tables (Key Features columns etc.) */
 table.coursology-medical-table td ul,
 table.coursology-medical-table td ol {

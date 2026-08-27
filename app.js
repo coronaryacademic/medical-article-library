@@ -2143,6 +2143,42 @@ function processTables(container) {
       cell.style.wordBreak = 'normal';
       cell.style.overflowWrap = 'break-word';
     });
+
+            // Wrap standalone arrow glyphs as inline SVG icons (open chevron head, no fill)
+    // instead of relying on font glyphs, which render as small filled shapes.
+    const arrowSvgPaths = {
+      '↓': '<path d="M12 4v15"/><path d="M6 13l6 6 6-6"/>',
+      '↑': '<path d="M12 20V5"/><path d="M6 11l6-6 6 6"/>',
+      '→': '<path d="M4 12h15"/><path d="M13 6l6 6-6 6"/>',
+      '←': '<path d="M20 12H5"/><path d="M11 6l-6 6 6 6"/>',
+      '⇓': '<path d="M12 4v15"/><path d="M6 13l6 6 6-6"/>',
+      '⇑': '<path d="M12 20V5"/><path d="M6 11l6-6 6 6"/>',
+      '↔': '<path d="M4 12h16"/><path d="M9 6l-6 6 6 6"/><path d="M15 6l6 6-6 6"/>'
+    };
+    const arrowRegex = /([↑↓↔→←⇑⇓])/g;
+    const walker = document.createTreeWalker(table, NodeFilter.SHOW_TEXT, null);
+    const arrowTextNodes = [];
+    while (walker.nextNode()) {
+      if (arrowRegex.test(walker.currentNode.nodeValue)) {
+        arrowTextNodes.push(walker.currentNode);
+      }
+      arrowRegex.lastIndex = 0;
+    }
+    arrowTextNodes.forEach(node => {
+      const frag = document.createDocumentFragment();
+      const parts = node.nodeValue.split(arrowRegex);
+      parts.forEach(part => {
+        if (/^[↑↓↔→←⇑⇓]$/.test(part) && arrowSvgPaths[part]) {
+          const span = document.createElement('span');
+          span.className = 'arrow-glyph';
+          span.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${arrowSvgPaths[part]}</svg>`;
+          frag.appendChild(span);
+        } else if (part) {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+      node.parentNode.replaceChild(frag, node);
+    });
   });
 }
 
