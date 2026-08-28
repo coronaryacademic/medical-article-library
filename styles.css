@@ -1040,8 +1040,13 @@ table.coursology-medical-table tr:nth-child(even) {
   background-color: transparent;
 }
 
-table.coursology-medical-table tr:hover {
-  background-color: transparent;
+table.coursology-medical-table:hover {
+  background-color: #f8fafc;
+}
+
+table.coursology-medical-table:hover td,
+table.coursology-medical-table:hover th {
+  background-color: #f8fafc;
 }
 
 table.coursology-medical-table td {
@@ -1669,8 +1674,8 @@ table.coursology-medical-table td li:last-child {
 
 .table-viewport table,
 .lb-table-viewport table {
-  width: 100% !important;
-  min-width: 100% !important;
+  width: auto !important;
+  min-width: 0 !important;
   max-width: 100% !important;
   table-layout: auto !important;
   border-collapse: collapse !important;
@@ -1679,7 +1684,7 @@ table.coursology-medical-table td li:last-child {
   line-height: 1.5 !important;
   color: #1e293b !important;
   background: #ffffff !important;
-  margin: 0 !important;
+  margin: 0 auto !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
@@ -1713,9 +1718,11 @@ table.coursology-medical-table td li:last-child {
   background-color: transparent !important;
 }
 
-.table-viewport tr:hover td,
-.lb-table-viewport tr:hover td {
-  background-color: transparent !important;
+.table-viewport table:hover td,
+.table-viewport table:hover th,
+.lb-table-viewport table:hover td,
+.lb-table-viewport table:hover th {
+  background-color: #f8fafc !important;
 }
 
 /* Window Footer & Caption */

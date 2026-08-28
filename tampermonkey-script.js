@@ -128,17 +128,18 @@
 
                         // Keep tables as clean raw HTML if not converted to images
                             turndownService.addRule('preserveTables', {
-                                filter: ['table'],
-                                replacement: function(content, node) {
-                                    const clone = node.cloneNode(true);
-                                    clone.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
-                                    normalizeTableLists(clone);
-                                    if (node.getAttribute('data-exhibit-asset') === 'true' || node.style.display === 'none') {
-                                        return clone.outerHTML;
+                                    filter: ['table'],
+                                    replacement: function(content, node) {
+                                        const clone = node.cloneNode(true);
+                                        clone.removeAttribute('class');
+                                        clone.querySelectorAll('*').forEach(el => el.removeAttribute('class'));
+                                        normalizeTableLists(clone);
+                                        if (node.getAttribute('data-exhibit-asset') === 'true' || node.style.display === 'none') {
+                                            return clone.outerHTML;
+                                        }
+                                        return '\n\n' + clone.outerHTML + '\n\n';
                                     }
-                                    return '\n\n' + clone.outerHTML + '\n\n';
-                                }
-                            });
+                                });
 
                             // Preserve subscript/superscript as raw HTML — Markdown has no native syntax for these
                             turndownService.addRule('preserveSubSup', {

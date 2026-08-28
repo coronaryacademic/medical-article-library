@@ -2098,21 +2098,22 @@ function processTables(container) {
     // by the extractor) should stay visible right where they occur.
     const isExhibitTable = table.getAttribute('data-exhibit-asset') === 'true';
 
-           table.classList.add('coursology-medical-table');
-           normalizeTableLists(table);
+           table.removeAttribute('class');
+table.classList.add('coursology-medical-table');
+normalizeTableLists(table);
 
-    // Strip ALL inline background styling from the table and every descendant,
-    // no matter how deeply nested (span/div/strong wrappers, etc.)
-    table.style.backgroundColor = '';
-    table.style.background = '';
-    table.removeAttribute('bgcolor');
-    table.querySelectorAll('*').forEach(el => {
-      el.style.backgroundColor = '';
-      el.style.background = '';
-      el.style.backgroundImage = '';
-      el.removeAttribute('bgcolor');
-    });
-
+// Strip ALL inline background styling from the table and every descendant,
+// no matter how deeply nested (span/div/strong wrappers, etc.)
+table.style.backgroundColor = '';
+table.style.background = '';
+table.removeAttribute('bgcolor');
+table.querySelectorAll('*').forEach(el => {
+  el.style.backgroundColor = '';
+  el.style.background = '';
+  el.style.backgroundImage = '';
+  el.removeAttribute('bgcolor');
+  el.removeAttribute('class');
+});
     if (isExhibitTable) {
       if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
         const wrapper = document.createElement('div');
@@ -3725,12 +3726,12 @@ function openTableLightbox(tableElem, captionTitle) {
       if (tableModal) tableModal.classList.remove('hidden');
       return;
     }
-    const cleanTbl = tableElem.cloneNode(true);
+        const cleanTbl = tableElem.cloneNode(true);
     cleanTbl.removeAttribute('id');
     cleanTbl.removeAttribute('width');
     cleanTbl.removeAttribute('height');
     cleanTbl.style.display = 'table';
-    cleanTbl.style.width = '100%';
+    cleanTbl.style.width = 'auto';
     cleanTbl.style.maxWidth = '100%';
     cleanTbl.style.height = 'auto';
     cleanTbl.querySelectorAll('[style]').forEach(el => {
@@ -3798,7 +3799,7 @@ function openLightbox(val, captionOverride, isNavigating = false) {
         const cleanTbl = item.element.cloneNode(true);
         cleanTbl.removeAttribute('id');
         cleanTbl.style.display = 'table';
-        cleanTbl.style.width = '100%';
+        cleanTbl.style.width = 'auto';
         cleanTbl.style.maxWidth = '100%';
         cleanTbl.style.height = 'auto';
         cleanTbl.querySelectorAll('[style]').forEach(e => {
