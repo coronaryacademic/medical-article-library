@@ -2346,3 +2346,9 @@ mark.yellow-highlight:hover {
   max-width: 500px;
 }
 
+.table-star-mark {
+  font-weight: 500;
+  font-size: 1.15em;
+  vertical-align: -0.05em;
+  margin-left: 1px;
+}

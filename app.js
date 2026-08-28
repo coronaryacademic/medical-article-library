@@ -2144,7 +2144,7 @@ function processTables(container) {
       }
       arrowRegex.lastIndex = 0;
     }
-    arrowTextNodes.forEach(node => {
+        arrowTextNodes.forEach(node => {
       const frag = document.createDocumentFragment();
       const parts = node.nodeValue.split(arrowRegex);
       parts.forEach(part => {
@@ -2159,7 +2159,33 @@ function processTables(container) {
       });
       node.parentNode.replaceChild(frag, node);
     });
+
+    // Make footnote asterisks (*) visibly bold/bigger inside table cells
+    const starWalker = document.createTreeWalker(table, NodeFilter.SHOW_TEXT, null);
+    const starTextNodes = [];
+    while (starWalker.nextNode()) {
+      if (starWalker.currentNode.nodeValue.includes('*')) {
+        starTextNodes.push(starWalker.currentNode);
+      }
+    }
+    starTextNodes.forEach(node => {
+      const frag = document.createDocumentFragment();
+      const parts = node.nodeValue.split(/(\*)/g);
+      parts.forEach(part => {
+        if (part === '*') {
+          const span = document.createElement('span');
+          span.className = 'table-star-mark';
+          span.textContent = '*';
+          frag.appendChild(span);
+        } else if (part) {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+      node.parentNode.replaceChild(frag, node);
+    });
+    
   });
+  
 }
 
 // Display Selected Article
@@ -4493,3 +4519,4 @@ function downloadBlob(blob, filename) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', init);
+
