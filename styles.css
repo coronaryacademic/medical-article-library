@@ -739,10 +739,6 @@ body.dragging-active * {
 .h1-section-body.collapsed, .h2-section-body.collapsed, .heading-content-block.collapsed {
   display: none !important;
 }
-  font-size: 0.84rem;
-  font-weight: 500;
-  color: #475569;
-}
 
 .toc-item.level-sub .toc-bullet {
   color: #1e293b;
@@ -1017,7 +1013,7 @@ h4.collapsible-heading, .article-body h4 { font-size: 1.05em; font-weight: 700; 
   width: 100%;
   overflow-x: auto;
   margin: 24px 0;
-  border: 1px solid #cbd5e1;
+  border: 1.5px solid #000000;
   border-radius: 8px;
   background-color: #ffffff;
 }
@@ -1026,7 +1022,8 @@ table.coursology-medical-table {
   width: 100%;
   min-width: 650px;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 1.05rem;
+  border: 1.5px solid #000000;
 }
 
 table.coursology-medical-table th {
@@ -1034,8 +1031,9 @@ table.coursology-medical-table th {
   color: #0f172a;
   font-weight: 700;
   text-align: left;
-  padding: 10px 14px;
-  border-bottom: 2px solid #cbd5e1;
+  padding: 6px 12px;
+  border: 1.5px solid #000000;
+  vertical-align: middle;
 }
 
 table.coursology-medical-table tr:nth-child(even) {
@@ -1047,14 +1045,22 @@ table.coursology-medical-table tr:hover {
 }
 
 table.coursology-medical-table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 6px 12px;
+  border: 1.5px solid #000000;
+  vertical-align: middle;
+  line-height: 1.4;
 }
 
 table.coursology-medical-table td .arrow-glyph {
   display: inline-flex;
   vertical-align: middle;
   color: #000000;
+}
+
+ul:has(> li:only-child),
+ol:has(> li:only-child) {
+  list-style: none !important;
+  padding-left: 0 !important;
 }
 
 table.coursology-medical-table td .arrow-glyph svg {
@@ -1071,12 +1077,9 @@ table.coursology-medical-table td ol {
   margin: 4px 0;
 }
 
-table.coursology-medical-table td ul {
-  list-style-type: disc;
-}
-
+table.coursology-medical-table td ul,
 table.coursology-medical-table td ol {
-  list-style-type: decimal;
+  list-style-type: none !important;
 }
 
 /* Nested sub-list (e.g. "(+) Aggressive behavior / (−) Corneal clouding") */
@@ -1679,7 +1682,7 @@ table.coursology-medical-table td li:last-child {
   table-layout: auto !important;
   border-collapse: collapse !important;
   font-family: var(--font-sans) !important;
-  font-size: 0.88rem !important;
+  font-size: 1rem !important;
   line-height: 1.5 !important;
   color: #1e293b !important;
   background: #ffffff !important;
@@ -1691,10 +1694,11 @@ table.coursology-medical-table td li:last-child {
 .table-viewport td,
 .lb-table-viewport th,
 .lb-table-viewport td {
-  padding: 10px 14px !important;
-  border: 1px solid #cbd5e1 !important;
+  padding: 6px 12px !important;
+  border: 1.5px solid #000000 !important;
   text-align: left !important;
-  vertical-align: top !important;
+  vertical-align: middle !important;
+  line-height: 1.4 !important;
   word-break: normal !important;
   overflow-wrap: break-word !important;
   white-space: normal !important;

@@ -83,36 +83,16 @@
 
     function normalizeTableLists(tableEl) {
     tableEl.querySelectorAll('ul, ol').forEach(listEl => {
-        const isNested = !!listEl.parentElement.closest('li');
-        listEl.style.listStyleType = listEl.tagName === 'OL' ? 'decimal' : (isNested ? 'circle' : 'disc');
-        listEl.style.listStylePosition = 'outside';
-        listEl.style.paddingLeft = '18px';
-        listEl.style.margin = isNested ? '2px 0' : '4px 0';
+        listEl.style.listStyle = 'none';
+        listEl.style.listStyleType = 'none';
+        listEl.style.paddingLeft = '0';
+        listEl.style.margin = '4px 0';
     });
     tableEl.querySelectorAll('li').forEach(liEl => {
+        liEl.style.listStyle = 'none';
+        liEl.style.listStyleType = 'none';
         liEl.style.marginBottom = '3px';
         liEl.style.lineHeight = '1.45';
-    });
-
-    tableEl.querySelectorAll('td').forEach(td => {
-        if (td.querySelector('ul, ol')) return;
-        const rows = Array.from(td.children).filter(el => el.tagName === 'P' || el.tagName === 'DIV');
-        if (rows.length < 2) return;
-
-        const newUl = document.createElement('ul');
-        newUl.style.listStyleType = 'disc';
-        newUl.style.listStylePosition = 'outside';
-        newUl.style.paddingLeft = '18px';
-        newUl.style.margin = '4px 0';
-        rows.forEach(rowEl => {
-            const li = document.createElement('li');
-            li.style.marginBottom = '3px';
-            li.style.lineHeight = '1.45';
-            li.innerHTML = rowEl.innerHTML;
-            newUl.appendChild(li);
-            rowEl.remove();
-        });
-        td.appendChild(newUl);
     });
 }
 

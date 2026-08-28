@@ -55,42 +55,18 @@ function isPlaceholderImage(src) {
 // consistent bullet/spacing via inline styles, since the site's own
 // classes that produced this styling get stripped during extraction.
 function normalizeTableLists(tableEl) {
-  // 1. Force bullet rendering on any real <ul>/<ol>, regardless of stripped classes
-  tableEl.querySelectorAll('ul, ol').forEach(listEl => {
-    const isNested = !!listEl.parentElement.closest('li');
-    listEl.style.listStyleType = listEl.tagName === 'OL' ? 'decimal' : (isNested ? 'circle' : 'disc');
-    listEl.style.listStylePosition = 'outside';
-    listEl.style.paddingLeft = '18px';
-    listEl.style.margin = isNested ? '2px 0' : '4px 0';
-  });
-  tableEl.querySelectorAll('li').forEach(liEl => {
-    liEl.style.marginBottom = '3px';
-    liEl.style.lineHeight = '1.45';
-  });
-
-  // 2. Some sources render "bullet lists" as a flat stack of <p>/<div> rows
-  // per feature (styled via now-stripped classes) instead of real <li>s.
-  // Detect that pattern in each <td> and convert it into a real list.
-  tableEl.querySelectorAll('td').forEach(td => {
-    if (td.querySelector('ul, ol')) return; // already a real list, skip
-    const rows = Array.from(td.children).filter(el => el.tagName === 'P' || el.tagName === 'DIV');
-    if (rows.length < 2) return;
-
-    const newUl = document.createElement('ul');
-    newUl.style.listStyleType = 'disc';
-    newUl.style.listStylePosition = 'outside';
-    newUl.style.paddingLeft = '18px';
-    newUl.style.margin = '4px 0';
-    rows.forEach(rowEl => {
-      const li = document.createElement('li');
-      li.style.marginBottom = '3px';
-      li.style.lineHeight = '1.45';
-      li.innerHTML = rowEl.innerHTML;
-      newUl.appendChild(li);
-      rowEl.remove();
+    tableEl.querySelectorAll('ul, ol').forEach(listEl => {
+        listEl.style.listStyle = 'none';
+        listEl.style.listStyleType = 'none';
+        listEl.style.paddingLeft = '0';
+        listEl.style.margin = '4px 0';
     });
-    td.appendChild(newUl);
-  });
+    tableEl.querySelectorAll('li').forEach(liEl => {
+        liEl.style.listStyle = 'none';
+        liEl.style.listStyleType = 'none';
+        liEl.style.marginBottom = '3px';
+        liEl.style.lineHeight = '1.45';
+    });
 }
 
 async function dbGetAll() {
@@ -2137,11 +2113,15 @@ function processTables(container) {
       table.style.display = 'none';
     }
 
-            table.querySelectorAll('th, td').forEach(cell => {
-      cell.style.padding = '12px 18px';
-      cell.style.lineHeight = '1.5';
+    table.querySelectorAll('th, td').forEach(cell => {
+      cell.style.padding = '6px 12px';
+      cell.style.verticalAlign = 'middle';
+      cell.style.lineHeight = '1.4';
       cell.style.wordBreak = 'normal';
       cell.style.overflowWrap = 'break-word';
+    });
+    table.querySelectorAll('th, td, p, strong').forEach(el => {
+      el.style.fontSize = '';
     });
 
             // Wrap standalone arrow glyphs as inline SVG icons (open chevron head, no fill)
@@ -3718,7 +3698,9 @@ function openTableLightbox(tableElem, captionTitle) {
       el.style.width = '';
       el.style.height = '';
       el.style.fontSize = '';
+      el.style.fontWeight = '';
     });
+    cleanTbl.style.fontWeight = '';
     tableContent.innerHTML = '';
     tableContent.appendChild(cleanTbl);
   }
