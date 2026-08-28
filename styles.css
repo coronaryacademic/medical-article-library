@@ -1057,12 +1057,6 @@ table.coursology-medical-table td .arrow-glyph {
   color: #000000;
 }
 
-ul:has(> li:only-child),
-ol:has(> li:only-child) {
-  list-style: none !important;
-  padding-left: 0 !important;
-}
-
 table.coursology-medical-table td .arrow-glyph svg {
   width: 1em;
   height: 1.3em;
@@ -1077,11 +1071,10 @@ table.coursology-medical-table td ol {
   margin: 4px 0;
 }
 
-table.coursology-medical-table td ul,
-table.coursology-medical-table td ol {
+table.coursology-medical-table td > ul,
+table.coursology-medical-table td > ol {
   list-style-type: none !important;
 }
-
 /* Nested sub-list (e.g. "(+) Aggressive behavior / (−) Corneal clouding") */
 table.coursology-medical-table td li ul,
 table.coursology-medical-table td li ol {

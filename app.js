@@ -56,14 +56,27 @@ function isPlaceholderImage(src) {
 // classes that produced this styling get stripped during extraction.
 function normalizeTableLists(tableEl) {
     tableEl.querySelectorAll('ul, ol').forEach(listEl => {
-        listEl.style.listStyle = 'none';
-        listEl.style.listStyleType = 'none';
-        listEl.style.paddingLeft = '0';
-        listEl.style.margin = '4px 0';
+        const isTopLevel = listEl.parentElement && listEl.parentElement.tagName === 'TD';
+
+        if (isTopLevel) {
+            listEl.style.listStyle = 'none';
+            listEl.style.listStyleType = 'none';
+            listEl.style.paddingLeft = '0';
+            listEl.style.margin = '4px 0';
+        } else {
+            listEl.style.listStyle = '';
+            listEl.style.listStyleType = listEl.tagName === 'OL' ? 'decimal' : 'circle';
+            listEl.style.listStylePosition = 'outside';
+            listEl.style.paddingLeft = '18px';
+            listEl.style.margin = '2px 0';
+        }
     });
+
     tableEl.querySelectorAll('li').forEach(liEl => {
-        liEl.style.listStyle = 'none';
-        liEl.style.listStyleType = 'none';
+        const parentList = liEl.parentElement;
+        if (parentList && parentList.style) {
+            liEl.style.listStyle = parentList.style.listStyleType === 'none' ? 'none' : '';
+        }
         liEl.style.marginBottom = '3px';
         liEl.style.lineHeight = '1.45';
     });
