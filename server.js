@@ -2,14 +2,19 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const multer = require('multer');
 const JSZip = require('jszip');
 
 const app = express();
 const PORT = process.env.PORT || 8088;
 
-// Directories — stored OUTSIDE the git repo at ~/UW_Library_Data
-const DATA_DIR = '/home/momen/Desktop/UW Library Files';
+// Keep user data outside the repository. Set UW_LIBRARY_DATA_DIR to customize it.
+const DATA_DIR = process.env.UW_LIBRARY_DATA_DIR || (
+  process.platform === 'win32'
+    ? path.join(os.homedir(), 'UW Library Files')
+    : path.join(os.homedir(), 'Desktop', 'UW Library Files')
+);
 const ARTICLES_DIR = path.join(DATA_DIR, 'articles');
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
 const LIBRARY_JSON_PATH = path.join(DATA_DIR, 'library.json');
