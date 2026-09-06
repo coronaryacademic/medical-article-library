@@ -215,16 +215,31 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
     const zip = await JSZip.loadAsync(req.file.buffer);
     const catalog = readCatalog();
     let newArticles = [];
+    const importId = 'imp' + Date.now() + Math.random().toString(36).substring(2, 8);
+    const mediaKeyMap = new Map();
 
-    // Extract media files directly to MEDIA_DIR on disk
     const mediaFiles = zip.filter((relPath, fileObj) => relPath.startsWith('media/') && !fileObj.dir);
     for (const mFile of mediaFiles) {
       const baseName = mFile.name.replace(/^media\//, '');
-      const mediaOutPath = path.join(MEDIA_DIR, baseName);
+      const namespacedBase = `${importId}__${baseName}`;
+      const mediaOutPath = path.join(MEDIA_DIR, namespacedBase);
       const fileBuffer = await mFile.async('nodebuffer');
+      fs.mkdirSync(path.dirname(mediaOutPath), { recursive: true });
       fs.writeFileSync(mediaOutPath, fileBuffer);
+      mediaKeyMap.set(mFile.name, `media/${namespacedBase}`);
+      mediaKeyMap.set(baseName, namespacedBase);
     }
     console.log(`[Host Server] Extracted ${mediaFiles.length} media files directly to ${MEDIA_DIR}`);
+
+    function rewriteMediaRefs(text) {
+      if (!text) return text;
+      let rewritten = text;
+      const entries = Array.from(mediaKeyMap.entries()).sort((a, b) => b[0].length - a[0].length);
+      for (const [oldKey, newKey] of entries) {
+        rewritten = rewritten.split(oldKey).join(newKey);
+      }
+      return rewritten;
+    }
 
     // Check for folder-manifest.json
     const manifestFile = zip.file('folder-manifest.json');
@@ -237,7 +252,9 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
       newArticles = (manifest.articles || []).map(art => ({
         ...art,
         folderName: art.folderName || folderName,
-        fetched: art.fetched !== undefined ? art.fetched : true
+        fetched: art.fetched !== undefined ? art.fetched : true,
+        markdown: rewriteMediaRefs(art.markdown),
+        html: rewriteMediaRefs(art.html)
       }));
     } else {
       // Single markdown or generic ZIP package
@@ -255,7 +272,7 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
           folderName: packageName,
           fetched: true,
           date: new Date().toISOString().split('T')[0],
-          markdown: content,
+          markdown: rewriteMediaRefs(content),
           html: `<article class="article-content"><h1>${title}</h1></article>`
         });
       }
