@@ -233,12 +233,22 @@ app.post('/api/import-zip', upload.single('zipFile'), async (req, res) => {
 
     function rewriteMediaRefs(text) {
       if (!text) return text;
-      let rewritten = text;
+      const cdnAttrs = [];
+      let rewritten = text.replace(/(data-cdn-src\s*=\s*["'])([^"']+)(["'])/gi, (match, prefix, url, suffix) => {
+        cdnAttrs.push(url);
+        return `${prefix}__UW_CDN_FALLBACK_${cdnAttrs.length - 1}__${suffix}`;
+      });
       const entries = Array.from(mediaKeyMap.entries()).sort((a, b) => b[0].length - a[0].length);
       for (const [oldKey, newKey] of entries) {
         rewritten = rewritten.split(oldKey).join(newKey);
       }
-      return rewritten;
+      for (const [oldKey, newKey] of mediaKeyMap.entries()) {
+        const baseName = oldKey.replace(/^media\//, '');
+        const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const duplicatedNamespace = new RegExp(`media/(?:[^/\\s"'<>]+__)+${escapedBaseName}(?=[\\s"'<>)]|$)`, 'g');
+        rewritten = rewritten.replace(duplicatedNamespace, `media/${newKey.replace(/^media\//, '')}`);
+      }
+      return rewritten.replace(/__UW_CDN_FALLBACK_(\d+)__/g, (match, index) => cdnAttrs[Number(index)]);
     }
 
     // Check for folder-manifest.json

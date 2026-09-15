@@ -1960,6 +1960,7 @@ function renderSidebar() {
     if ((query || activeFilterTab !== 'all') && groupArticles.length === 0) return;
 
     const allFolderArticles = articles.filter(a => (a.folderName || 'Uncategorized') === folderName);
+    if (folderName === 'Uncategorized' && allFolderArticles.length === 0) return;
     const fetchedInFolder = allFolderArticles.filter(a => a.fetched !== false && !!a.markdown).length;
     const totalInFolder = allFolderArticles.length;
 
@@ -2305,9 +2306,12 @@ function displayArticle(id) {
     }
     el.onerror = function() {
       const cdnBackup = this.getAttribute('data-cdn-src');
-      if (cdnBackup && this.src !== cdnBackup) {
+      if (cdnBackup && !this.dataset.cdnFallbackAttempted) {
+        this.dataset.cdnFallbackAttempted = 'true';
         console.warn('Local hard-drive asset missing/deleted. Falling back to CDN link:', cdnBackup);
         this.src = cdnBackup;
+      } else {
+        this.onerror = null;
       }
     };
   });
@@ -4460,7 +4464,11 @@ async function importSingleZipFile(file) {
     // THIS import's namespaced assets, not some other zip's same-named file
     function rewriteMediaRefs(text) {
       if (!text) return text;
-      let out = text;
+      const cdnAttrs = [];
+      let out = text.replace(/(data-cdn-src\s*=\s*["'])([^"']+)(["'])/gi, (match, prefix, url, suffix) => {
+        cdnAttrs.push(url);
+        return `${prefix}__UW_CDN_FALLBACK_${cdnAttrs.length - 1}__${suffix}`;
+      });
       // Longest keys first (e.g. "media/asset_1.jpg" before "asset_1.jpg")
       const entries = Array.from(mediaKeyMap.entries()).sort((a, b) => b[0].length - a[0].length);
       entries.forEach(([oldKey, newKey]) => {
@@ -4471,7 +4479,13 @@ async function importSingleZipFile(file) {
         const regex = new RegExp('(?<!__)' + escaped, 'g');
         out = out.replace(regex, newKey);
       });
-      return out;
+      for (const [oldKey, newKey] of mediaKeyMap.entries()) {
+        const baseName = oldKey.replace(/^media\//, '');
+        const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const duplicatedNamespace = new RegExp(`media/(?:[^/\\s"'<>]+__)+${escapedBaseName}(?=[\\s"'<>)]|$)`, 'g');
+        out = out.replace(duplicatedNamespace, `media/${newKey.replace(/^media\//, '')}`);
+      }
+      return out.replace(/__UW_CDN_FALLBACK_(\d+)__/g, (match, index) => cdnAttrs[Number(index)]);
     }
 
     let newArticles = [];
