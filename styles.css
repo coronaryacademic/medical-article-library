@@ -470,35 +470,37 @@ body.dragging-active * {
 
 /* Sidebar Collapsible Folder Groups */
 .sidebar-folder-card {
-  margin-bottom: 12px;
-  border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-  transition: border-color 0.15s ease;
+  position: relative;
+  margin: 2px 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .sidebar-folder-card:hover {
-  border-color: #cbd5e1;
+  border-color: transparent;
 }
 
 .sidebar-folder-header {
-  padding: 12px 14px;
+  min-height: 38px;
+  padding: 7px 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  background: #f8fafc;
+  background: transparent;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   color: #0f172a;
   user-select: none;
-  transition: background-color 0.15s ease;
+  border-radius: 7px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .sidebar-folder-header:hover {
-  background: #f1f5f9;
+  background: #eef6ff;
   color: #2563eb;
 }
 
@@ -562,22 +564,39 @@ body.dragging-active * {
 }
 
 .folder-article-list {
+  position: relative;
   list-style: none;
-  padding: 8px 6px;
-  margin: 0;
-  background: #ffffff;
-  border-top: 1px solid #f1f5f9;
+  padding: 3px 0 3px 18px;
+  margin: 0 0 2px 11px;
+  background: transparent;
+  border-left: 1px solid #dbeafe;
 }
 
 .folder-article-list li {
-  margin: 4px 4px;
-  border-radius: 6px;
+  position: relative;
+  margin: 2px 0;
+  border-radius: 7px;
 }
 
 .folder-article-list .article-row-item {
-  padding: 8px 12px;
+  min-height: 34px;
+  padding: 7px 8px;
   font-size: 0.84rem;
   font-weight: 500;
+}
+
+.folder-article-list li::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 13px;
+  border-top: 1px solid #dbeafe;
+}
+
+.sidebar-folder-card.active-target-folder > .sidebar-folder-header {
+  color: #0369a1;
+  background: #f0f9ff;
 }
 
 .filter-tabs {
@@ -2349,4 +2368,107 @@ mark.yellow-highlight:hover {
   font-size: 1.15em;
   vertical-align: -0.05em;
   margin-left: 1px;
+}
+
+.sidebar-options {
+  position: relative;
+  padding: 0 16px 10px;
+}
+
+.sidebar-options-btn {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-options-btn:hover,
+.sidebar-options-btn[aria-expanded="true"] {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.12);
+}
+
+.sidebar-options-btn > svg:first-child {
+  width: 17px;
+  height: 17px;
+}
+
+.sidebar-options-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.sidebar-options-btn[aria-expanded="true"] .sidebar-options-chevron {
+  transform: rotate(180deg);
+}
+
+.sidebar-options-menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 16px;
+  right: 16px;
+  z-index: 300;
+  padding: 7px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+}
+
+.sidebar-options-menu.hidden {
+  display: none;
+}
+
+.sidebar-options-section {
+  padding: 7px 9px 4px;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-option-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-option-item:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.option-icon {
+  width: 25px;
+  color: #2563eb;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: center;
 }

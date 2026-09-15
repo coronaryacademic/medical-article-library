@@ -804,6 +804,29 @@ const importJsonInput = document.getElementById('import-json-input');
 
 // Setup Event Listeners
 function setupEventListeners() {
+  const optionsBtn = document.getElementById('sidebar-options-btn');
+  const optionsMenu = document.getElementById('sidebar-options-menu');
+  if (optionsBtn && optionsMenu) {
+    const closeOptionsMenu = () => {
+      optionsMenu.classList.add('hidden');
+      optionsBtn.setAttribute('aria-expanded', 'false');
+    };
+    optionsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = !optionsMenu.classList.contains('hidden');
+      if (isOpen) closeOptionsMenu();
+      else {
+        optionsMenu.classList.remove('hidden');
+        optionsBtn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    optionsMenu.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', closeOptionsMenu);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeOptionsMenu();
+    });
+  }
+
   const createFolderBtn = document.getElementById('create-folder-btn');
   if (createFolderBtn) createFolderBtn.addEventListener('click', handleCreateFolder);
 
@@ -2000,7 +2023,7 @@ function renderSidebar() {
     folderHeader.innerHTML = `
       <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
         ${folderSvg}
-        <span style="font-weight:600; font-size:0.92rem; color:#0284c7;">${folderName}</span>
+        <span>${folderName}</span>
       </div>
       <div class="folder-actions" style="display:flex; align-items:center; gap:6px;">
         <button class="folder-paste-btn" title="Paste MD into this folder">+ Paste MD</button>

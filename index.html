@@ -37,50 +37,25 @@
         </div>
       </div>
 
-      <div class="sidebar-action-grid">
-        <button id="create-folder-btn" class="btn action-btn new-folder-action">
-          <svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-          <span>New Folder</span>
+      <div class="sidebar-options">
+        <button id="sidebar-options-btn" class="sidebar-options-btn" aria-expanded="false" aria-controls="sidebar-options-menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          <span>Library actions</span>
+          <svg class="sidebar-options-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <button id="paste-btn" class="btn action-btn paste-action">
-          <svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 1H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg>
-          <span>Paste MD</span>
-        </button>
-      </div>
-
-      <div class="quick-import-bar">
-        <label class="quick-import-pill file-label" title="Import .md files">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span>.md</span>
-          <input type="file" id="file-input" accept=".md,.txt" multiple hidden>
-        </label>
-
-        <label class="quick-import-pill file-label" title="Import .zip package">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          <span>.zip</span>
-          <input type="file" id="import-zip-input" accept=".zip" multiple hidden>
-        </label>
-
-        <button id="import-tree-btn" class="quick-import-pill" title="Import HTML Navigation Tree">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          <span>Tree</span>
-        </button>
-
-        <button id="script-modal-btn" class="quick-import-pill" title="Get Tampermonkey Script">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          <span>Script</span>
-        </button>
-      </div>
-
-      <div class="folder-global-controls">
-        <button id="expand-all-folders-btn" class="folder-ctrl-btn" title="Expand all folder accordions">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
-          <span>Expand All</span>
-        </button>
-        <button id="collapse-all-folders-btn" class="folder-ctrl-btn" title="Collapse all folder accordions">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
-          <span>Collapse All</span>
-        </button>
+        <div id="sidebar-options-menu" class="sidebar-options-menu hidden">
+          <div class="sidebar-options-section">Create</div>
+          <button id="create-folder-btn" class="sidebar-option-item"><span class="option-icon">+</span><span>New Folder</span></button>
+          <button id="paste-btn" class="sidebar-option-item"><span class="option-icon">+</span><span>Paste Markdown</span></button>
+          <div class="sidebar-options-section">Import</div>
+          <label class="sidebar-option-item file-label"><span class="option-icon">MD</span><span>Markdown files</span><input type="file" id="file-input" accept=".md,.txt" multiple hidden></label>
+          <label class="sidebar-option-item file-label"><span class="option-icon">ZIP</span><span>ZIP package</span><input type="file" id="import-zip-input" accept=".zip" multiple hidden></label>
+          <button id="import-tree-btn" class="sidebar-option-item"><span class="option-icon">&#9638;</span><span>Navigation tree</span></button>
+          <button id="script-modal-btn" class="sidebar-option-item"><span class="option-icon">&lt;/&gt;</span><span>Userscript</span></button>
+          <div class="sidebar-options-section">Tree view</div>
+          <button id="expand-all-folders-btn" class="sidebar-option-item"><span class="option-icon">&#8964;</span><span>Expand all folders</span></button>
+          <button id="collapse-all-folders-btn" class="sidebar-option-item"><span class="option-icon">&#8963;</span><span>Collapse all folders</span></button>
+        </div>
       </div>
 
       <div id="tag-filter-bar" class="tag-filter-bar" style="display:none;"></div>
@@ -100,21 +75,6 @@
 
     <!-- Main Content Viewer -->
     <main class="main-viewer">
-
-      <!-- Top Workspace Navigation Bar -->
-      <header class="article-top-nav-bar">
-        <div class="top-nav-tabs">
-          <button id="tab-reader-view" class="top-tab-btn active">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-            <span>Reader View</span>
-          </button>
-          <button id="tab-bookmarks-view" class="top-tab-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-            <span>Bookmarks</span>
-            <span id="top-bookmark-count" class="top-tab-badge">0</span>
-          </button>
-        </div>
-      </header>
 
       <!-- Welcome / Empty State -->
       <div id="welcome-state" class="empty-state">
