@@ -91,7 +91,7 @@
       <section id="bookmarks-workspace" class="bookmarks-workspace hidden">
         <div class="bookmarks-workspace-header">
           <div class="bookmarks-title-group">
-            <h2>⭐ Bookmarked Guides & Notes</h2>
+            <h2><svg class="bookmarks-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>Bookmarked Guides & Notes</h2>
             <p>Quick access to all your pinned medical reference articles and study guides.</p>
           </div>
           <div class="bookmarks-workspace-controls">
@@ -259,6 +259,53 @@
 
   <!-- Floating Minimized Windows Dock -->
   <div id="minimized-dock" class="minimized-dock hidden"></div>
+
+  <!-- Quick Notes -->
+  <div id="quick-tools-dock" class="quick-tools-dock" title="Drag tools">
+    <button id="quick-notes-launcher" class="quick-tool-btn" title="Open quick notes" aria-label="Open quick notes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+    </button>
+    <button id="quick-highlight-toggle" class="quick-tool-btn" title="Auto highlight: on" aria-label="Toggle auto highlight" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14 4 6 6"/><path d="M5 19 3 21"/><path d="m3 14 7-7 7 7-7 7z"/><path d="m14 4 3-3 6 6-3 3"/></svg>
+    </button>
+    <button id="quick-read-toggle" class="quick-tool-btn" title="Mark article as read" aria-label="Mark article as read">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v16H5z"/><path d="m8 12 2.5 2.5L16 9"/></svg>
+    </button>
+    <button id="quick-bookmark-toggle" class="quick-tool-btn" title="Bookmark article" aria-label="Bookmark article">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>
+    </button>
+  </div>
+  <div id="quick-notes-popup" class="quick-notes-popup hidden" aria-label="Quick notes window">
+    <div id="quick-notes-header" class="quick-notes-header">
+      <div class="quick-notes-title"><span class="quick-notes-dot"></span><span>Quick notes</span></div>
+      <div class="quick-notes-window-actions">
+        <button id="quick-notes-min-btn" class="quick-notes-window-btn" title="Minimize">—</button>
+        <button id="quick-notes-max-btn" class="quick-notes-window-btn" title="Maximize">□</button>
+        <button id="quick-notes-close-btn" class="quick-notes-window-btn quick-notes-close" title="Close">×</button>
+      </div>
+    </div>
+    <div class="quick-notes-toolbar" role="toolbar" aria-label="Note formatting">
+      <button type="button" data-note-command="bold" title="Bold"><strong>B</strong></button>
+      <button type="button" data-note-command="italic" title="Italic"><em>I</em></button>
+      <button type="button" data-note-command="underline" title="Underline"><u>U</u></button>
+      <button type="button" data-note-command="insertUnorderedList" title="Bullet list">•</button>
+      <button type="button" data-note-command="formatBlock" data-note-value="h2" title="Heading">H</button>
+      <label class="quick-notes-color" title="Text color"><span>A</span><input id="quick-notes-color" type="color" value="#172033" aria-label="Text color"></label>
+      <span class="quick-notes-toolbar-spacer"></span>
+      <button type="button" id="quick-notes-clear-btn" title="Clear note">Clear</button>
+    </div>
+    <input id="quick-notes-title" class="quick-notes-title-input" type="text" placeholder="Note title" aria-label="Note title">
+    <div id="quick-notes-editor" class="quick-notes-editor" contenteditable="true" spellcheck="true" data-placeholder="Start writing..."></div>
+    <div class="quick-notes-footer">
+      <span id="quick-notes-status">Saved in this browser</span>
+      <div class="quick-notes-export-actions">
+        <button type="button" data-note-export="txt" title="Download text file">TXT</button>
+        <button type="button" data-note-export="md" title="Download Markdown file">MD</button>
+        <button type="button" data-note-export="pdf" title="Print or save as PDF">PDF</button>
+      </div>
+    </div>
+    <div class="modal-resize-handle" title="Drag corner to resize"></div>
+  </div>
 
   <!-- Tampermonkey Script Modal -->
   <div id="script-modal" class="lightbox hidden" style="background: rgba(0,0,0,0.85);">

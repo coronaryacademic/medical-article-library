@@ -183,6 +183,7 @@ async function loadMediaFromDB() {
 // Application State
 let articles = [];
 let activeArticleId = null;
+let autoHighlightEnabled = localStorage.getItem('medical_library_auto_highlight') !== 'false';
 
 let currentArticleToc = []; // [{ id, text, level }]
 let activeTocCollapsed = false; // Tracks if active article TOC is collapsed in sidebar
@@ -593,6 +594,7 @@ async function init() {
   setupEventListeners();
   setupPanAndZoom();
   setupWindowControls();
+  setupQuickNotes();
   setupScrollSpy();
   setupTextHighlighter();
   renderSidebar();
@@ -669,10 +671,10 @@ function renderBookmarksWorkspace() {
   if (filtered.length === 0) {
     grid.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 48px 24px; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 16px;">
-        <div style="font-size: 2.5rem; margin-bottom: 12px;">⭐</div>
+        <svg class="bookmarks-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>
         <h3 style="font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 6px;">${query ? 'No matching bookmarked guides found' : 'No Bookmarked Guides Yet'}</h3>
         <p style="font-size: 0.85rem; color: #64748b; max-width: 420px; margin: 0 auto;">
-          ${query ? 'Try searching for another medical term or topic.' : 'Click the ⭐ star icon next to any article title in the sidebar to add it to your Bookmarks workspace for quick reference.'}
+          ${query ? 'Try searching for another medical term or topic.' : 'Click the bookmark icon next to any article title in the sidebar to add it to your Bookmarks workspace for quick reference.'}
         </p>
       </div>
     `;
@@ -1935,7 +1937,7 @@ function renderSidebar() {
   // Render pinned Bookmarks folder if bookmarked articles exist
   const bookmarkedArts = articles.filter(a => a.bookmarked);
   if (bookmarkedArts.length > 0 && !query) {
-    const bmFolderName = '⭐ Bookmarks';
+    const bmFolderName = 'Bookmarks';
     const isBmCollapsed = folderCollapseState.has(bmFolderName);
 
     const bmCard = document.createElement('div');
@@ -1948,7 +1950,7 @@ function renderSidebar() {
     bmHeader.style.background = '#fffbeb';
     bmHeader.innerHTML = `
       <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:1.1rem; line-height:1;">⭐</span>
+        <svg class="sidebar-bookmark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>
         <span style="font-weight:700; font-size:0.92rem; color:#b45309;">Bookmarks</span>
         <span class="folder-count-badge" style="background:#fef3c7; color:#b45309;">${bookmarkedArts.length}</span>
       </div>
@@ -2232,6 +2234,7 @@ function displayArticle(id) {
   if (!article) return;
 
   activeArticleId = id;
+  if (window.updateQuickTools) window.updateQuickTools();
 
   if (activeWorkspaceMode === 'bookmarks') {
     switchWorkspaceMode('reader');
@@ -3311,6 +3314,7 @@ function setupTextHighlighter() {
   if (!articleBody) return;
 
   articleBody.addEventListener('mouseup', () => {
+    if (!autoHighlightEnabled) return;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
 
@@ -3515,6 +3519,215 @@ function setupWindowControls() {
   if (tblWindow && tblHeader) {
     makeWindowDraggableAndResizable(tblWindow, tblHeader, tblModal, tblMin, tblMax, tblClose, 'Table Viewer');
   }
+}
+
+function setupQuickNotes() {
+  const launcher = document.getElementById('quick-notes-launcher');
+  const toolsDock = document.getElementById('quick-tools-dock');
+  const popup = document.getElementById('quick-notes-popup');
+  const header = document.getElementById('quick-notes-header');
+  const titleInput = document.getElementById('quick-notes-title');
+  const editor = document.getElementById('quick-notes-editor');
+  const status = document.getElementById('quick-notes-status');
+  if (!launcher || !toolsDock || !popup || !header || !titleInput || !editor) return;
+
+  const saved = localStorage.getItem('medical_library_quick_note');
+  if (saved) {
+    try {
+      const note = JSON.parse(saved);
+      titleInput.value = note.title || '';
+      editor.innerHTML = note.html || '';
+    } catch (e) {}
+  }
+
+  const saveNote = () => {
+    localStorage.setItem('medical_library_quick_note', JSON.stringify({
+      title: titleInput.value,
+      html: editor.innerHTML,
+      updatedAt: Date.now()
+    }));
+    if (status) status.textContent = 'Saved in this browser';
+  };
+
+  const openNotes = () => {
+    popup.classList.remove('hidden');
+    editor.focus();
+  };
+  launcher.addEventListener('click', openNotes);
+
+  const highlightToggle = document.getElementById('quick-highlight-toggle');
+  const readToggle = document.getElementById('quick-read-toggle');
+  const bookmarkToggle = document.getElementById('quick-bookmark-toggle');
+  const updateToolState = () => {
+    if (highlightToggle) {
+      highlightToggle.setAttribute('aria-pressed', String(autoHighlightEnabled));
+      highlightToggle.title = `Auto highlight: ${autoHighlightEnabled ? 'on' : 'off'}`;
+    }
+    const article = articles.find(item => item.id === activeArticleId);
+    if (readToggle) {
+      readToggle.dataset.active = article?.read ? 'true' : 'false';
+      readToggle.title = article?.read ? 'Article marked as read' : 'Mark article as read';
+    }
+    if (bookmarkToggle) {
+      bookmarkToggle.dataset.active = article?.bookmarked ? 'true' : 'false';
+      bookmarkToggle.title = article?.bookmarked ? 'Remove bookmark' : 'Bookmark article';
+    }
+  };
+  highlightToggle?.addEventListener('click', () => {
+    autoHighlightEnabled = !autoHighlightEnabled;
+    localStorage.setItem('medical_library_auto_highlight', String(autoHighlightEnabled));
+    updateToolState();
+  });
+  readToggle?.addEventListener('click', async () => {
+    const article = articles.find(item => item.id === activeArticleId);
+    if (!article) return;
+    article.read = true;
+    await saveArticles(article);
+    updateToolState();
+    renderSidebar();
+  });
+  bookmarkToggle?.addEventListener('click', async () => {
+    const article = articles.find(item => item.id === activeArticleId);
+    if (!article) return;
+    article.bookmarked = !article.bookmarked;
+    await saveArticles(article);
+    updateToolState();
+    renderSidebar();
+  });
+  window.updateQuickTools = updateToolState;
+  updateToolState();
+  titleInput.addEventListener('input', saveNote);
+  editor.addEventListener('input', saveNote);
+
+  popup.querySelectorAll('[data-note-command]').forEach((button) => {
+    button.addEventListener('mousedown', (e) => e.preventDefault());
+    button.addEventListener('click', () => {
+      editor.focus();
+      const command = button.dataset.noteCommand;
+      document.execCommand(command, false, button.dataset.noteValue || null);
+      saveNote();
+    });
+  });
+
+  document.getElementById('quick-notes-color')?.addEventListener('input', (e) => {
+    editor.focus();
+    document.execCommand('foreColor', false, e.target.value);
+    saveNote();
+  });
+
+  document.getElementById('quick-notes-clear-btn')?.addEventListener('click', () => {
+    if (!editor.innerText.trim() || confirm('Clear this note?')) {
+      editor.innerHTML = '';
+      titleInput.value = '';
+      saveNote();
+      editor.focus();
+    }
+  });
+
+  popup.querySelectorAll('[data-note-export]').forEach((button) => {
+    button.addEventListener('click', () => exportQuickNote(button.dataset.noteExport));
+  });
+
+  makeWindowDraggableAndResizable(
+    popup,
+    header,
+    popup,
+    document.getElementById('quick-notes-min-btn'),
+    document.getElementById('quick-notes-max-btn'),
+    document.getElementById('quick-notes-close-btn'),
+    'Quick notes'
+  );
+
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let moved = false;
+  toolsDock.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    moved = false;
+    const rect = toolsDock.getBoundingClientRect();
+    const startLeft = rect.left;
+    const startTop = rect.top;
+    const onMove = (moveEvent) => {
+      const dx = moveEvent.clientX - dragStartX;
+      const dy = moveEvent.clientY - dragStartY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+      if (!moved) return;
+      toolsDock.style.left = `${Math.max(4, Math.min(window.innerWidth - toolsDock.offsetWidth - 4, startLeft + dx))}px`;
+      toolsDock.style.top = `${Math.max(4, Math.min(window.innerHeight - toolsDock.offsetHeight - 4, startTop + dy))}px`;
+      toolsDock.style.right = 'auto';
+      toolsDock.style.bottom = 'auto';
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+function quickNotePlainText() {
+  const editor = document.getElementById('quick-notes-editor');
+  return editor ? editor.innerText.replace(/\u00a0/g, ' ').trim() : '';
+}
+
+function quickNoteMarkdown() {
+  const title = document.getElementById('quick-notes-title')?.value.trim() || '';
+  const editor = document.getElementById('quick-notes-editor');
+  if (!editor) return title ? `# ${title}\n` : '';
+  const convert = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue.replace(/\s+/g, ' ');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const content = Array.from(node.childNodes).map(convert).join('');
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'strong' || tag === 'b') return `**${content.trim()}**`;
+    if (tag === 'em' || tag === 'i') return `*${content.trim()}*`;
+    if (tag === 'u') return `<u>${content.trim()}</u>`;
+    if (tag === 'h1' || tag === 'h2' || tag === 'h3') return `\n${'#'.repeat(Number(tag[1]))} ${content.trim()}\n`;
+    if (tag === 'li') return `- ${content.trim()}\n`;
+    if (tag === 'br') return '\n';
+    if (tag === 'div' || tag === 'p' || tag === 'ul' || tag === 'ol') return `${content.trim()}\n`;
+    return content;
+  };
+  const body = Array.from(editor.childNodes).map(convert).join('').replace(/\n{3,}/g, '\n\n').trim();
+  return `${title ? `# ${title}\n\n` : ''}${body}\n`;
+}
+
+function downloadQuickNote(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportQuickNote(format) {
+  const title = document.getElementById('quick-notes-title')?.value.trim() || 'quick-note';
+  const filename = title.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'quick-note';
+  if (format === 'txt') {
+    downloadQuickNote(new Blob([`${title ? `${title}\n\n` : ''}${quickNotePlainText()}\n`], { type: 'text/plain;charset=utf-8' }), `${filename}.txt`);
+  } else if (format === 'md') {
+    downloadQuickNote(new Blob([quickNoteMarkdown()], { type: 'text/markdown;charset=utf-8' }), `${filename}.md`);
+  } else if (format === 'pdf') {
+    const editor = document.getElementById('quick-notes-editor');
+    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    if (!printWindow) return;
+    printWindow.document.write(`<!doctype html><html><head><title>${filename}</title><style>body{font-family:Arial,sans-serif;max-width:760px;margin:48px auto;color:#172033;line-height:1.6}h1{border-bottom:1px solid #ddd;padding-bottom:10px}h2{margin-top:24px}ul{padding-left:24px}</style></head><body><h1>${escapeHtml(title || 'Quick note')}</h1>${editor?.innerHTML || ''}</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); }, 250);
+  }
+}
+
+function escapeHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value;
+  return div.innerHTML;
 }
 
 let globalMouseDownTarget = null;
