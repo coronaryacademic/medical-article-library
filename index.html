@@ -37,24 +37,10 @@
         </div>
       </div>
 
-      <div class="sidebar-options">
-        <button id="sidebar-options-btn" class="sidebar-options-btn" aria-expanded="false" aria-controls="sidebar-options-menu">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-          <span>Library actions</span>
-          <svg class="sidebar-options-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-        <div id="sidebar-options-menu" class="sidebar-options-menu hidden">
-          <div class="sidebar-options-section">Create</div>
-          <button id="create-folder-btn" class="sidebar-option-item"><span class="option-icon">+</span><span>New Folder</span></button>
-          <button id="paste-btn" class="sidebar-option-item"><span class="option-icon">+</span><span>Paste Markdown</span></button>
-          <div class="sidebar-options-section">Import</div>
-          <label class="sidebar-option-item file-label"><span class="option-icon">MD</span><span>Markdown files</span><input type="file" id="file-input" accept=".md,.txt" multiple hidden></label>
-          <label class="sidebar-option-item file-label"><span class="option-icon">ZIP</span><span>ZIP package</span><input type="file" id="import-zip-input" accept=".zip" multiple hidden></label>
-          <button id="import-tree-btn" class="sidebar-option-item"><span class="option-icon">&#9638;</span><span>Navigation tree</span></button>
-          <button id="script-modal-btn" class="sidebar-option-item"><span class="option-icon">&lt;/&gt;</span><span>Userscript</span></button>
-          <div class="sidebar-options-section">Tree view</div>
-          <button id="expand-all-folders-btn" class="sidebar-option-item"><span class="option-icon">&#8964;</span><span>Expand all folders</span></button>
-          <button id="collapse-all-folders-btn" class="sidebar-option-item"><span class="option-icon">&#8963;</span><span>Collapse all folders</span></button>
+      <div class="search-box">
+        <div class="search-input-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Search medical library..." autocomplete="off">
         </div>
       </div>
 
@@ -65,6 +51,32 @@
       </div>
 
       <div class="sidebar-footer">
+        <div class="footer-control-row">
+          <button id="footer-mode-pill" class="footer-mode-pill user" title="Switch between User & Admin modes">
+            <span class="mode-pill-dot"></span>
+            <span id="footer-mode-text" class="footer-mode-text">User</span>
+          </button>
+          <div class="sidebar-options">
+            <button id="sidebar-options-btn" class="sidebar-options-btn" aria-expanded="false" aria-controls="sidebar-options-menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              <span>Library actions</span>
+              <svg class="sidebar-options-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="sidebar-options-menu" class="sidebar-options-menu hidden">
+              <div class="sidebar-options-section admin-only">Create</div>
+              <button id="create-folder-btn" class="sidebar-option-item admin-only"><span class="option-icon">+</span><span>New Folder</span></button>
+              <button id="paste-btn" class="sidebar-option-item admin-only"><span class="option-icon">+</span><span>Paste Markdown</span></button>
+              <div class="sidebar-options-section admin-only">Import</div>
+              <label class="sidebar-option-item file-label admin-only"><span class="option-icon">MD</span><span>Markdown files</span><input type="file" id="file-input" accept=".md,.txt" multiple hidden></label>
+              <label class="sidebar-option-item file-label admin-only"><span class="option-icon">ZIP</span><span>ZIP package</span><input type="file" id="import-zip-input" accept=".zip" multiple hidden></label>
+              <button id="import-tree-btn" class="sidebar-option-item admin-only"><span class="option-icon">&#9638;</span><span>Navigation tree</span></button>
+              <button id="script-modal-btn" class="sidebar-option-item admin-only"><span class="option-icon">&lt;/&gt;</span><span>Userscript</span></button>
+              <div class="sidebar-options-section">Tree view</div>
+              <button id="expand-all-folders-btn" class="sidebar-option-item"><span class="option-icon">&#8964;</span><span>Expand all folders</span></button>
+              <button id="collapse-all-folders-btn" class="sidebar-option-item"><span class="option-icon">&#8963;</span><span>Collapse all folders</span></button>
+            </div>
+          </div>
+        </div>
         <button id="footer-settings-btn" class="sidebar-footer-settings-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Settings & Backup View</span>
@@ -111,7 +123,13 @@
         <header class="article-header">
           <h1 id="article-title">Article Title</h1>
           <div class="article-meta-row">
-            <span id="article-date">Extracted: --</span>
+            <div class="article-meta-info" style="display: flex; align-items: center; gap: 10px;">
+              <span id="article-date">Extracted: --</span>
+              <button id="article-read-status-badge" class="article-read-status-badge is-unread" title="Click to toggle read status">
+                <span class="read-status-dot"></span>
+                <span class="read-status-text">Mark as read</span>
+              </button>
+            </div>
             
             <div class="article-toolbar" style="display: flex; align-items: center; gap: 8px;">
               <div class="font-size-controls" style="display: inline-flex; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff;">
@@ -260,19 +278,37 @@
   <!-- Floating Minimized Windows Dock -->
   <div id="minimized-dock" class="minimized-dock hidden"></div>
 
-  <!-- Quick Notes -->
-  <div id="quick-tools-dock" class="quick-tools-dock" title="Drag tools">
+  <!-- Floating Draggable Quick Tools Dock -->
+  <div id="quick-tools-dock" class="quick-tools-dock" role="toolbar" aria-label="Quick tools toolbar">
+    <div class="quick-tools-drag-handle" title="Drag toolbar" aria-label="Drag toolbar">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="9" cy="5" r="1.6"/>
+        <circle cx="15" cy="5" r="1.6"/>
+        <circle cx="9" cy="12" r="1.6"/>
+        <circle cx="15" cy="12" r="1.6"/>
+        <circle cx="9" cy="19" r="1.6"/>
+        <circle cx="15" cy="19" r="1.6"/>
+      </svg>
+    </div>
+    <div class="quick-tools-divider"></div>
     <button id="quick-notes-launcher" class="quick-tool-btn" title="Open quick notes" aria-label="Open quick notes">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
     </button>
     <button id="quick-highlight-toggle" class="quick-tool-btn" title="Auto highlight: on" aria-label="Toggle auto highlight" aria-pressed="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14 4 6 6"/><path d="M5 19 3 21"/><path d="m3 14 7-7 7 7-7 7z"/><path d="m14 4 3-3 6 6-3 3"/></svg>
+      <span class="tool-icon-stack highlight-stack">
+        <svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="highlighter" class="svg-inline--fa fa-highlighter" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M315 315l158.4-215L444.1 70.6 229 229 315 315zm-187 5s0 0 0 0l0-71.7c0-15.3 7.2-29.6 19.5-38.6L420.6 8.4C428 2.9 437 0 446.2 0c11.4 0 22.4 4.5 30.5 12.6l54.8 54.8c8.1 8.1 12.6 19 12.6 30.5c0 9.2-2.9 18.2-8.4 25.6L334.4 396.5c-9 12.3-23.4 19.5-38.6 19.5L224 416l-25.4 25.4c-12.5 12.5-32.8 12.5-45.3 0l-50.7-50.7c-12.5-12.5-12.5-32.8 0-45.3L128 320zM7 466.3l63-63 70.6 70.6-31 31c-4.5 4.5-10.6 7-17 7L24 512c-13.3 0-24-10.7-24-24l0-4.7c0-6.4 2.5-12.5 7-17z"></path></svg>
+        <svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="slash" class="svg-inline--fa fa-slash highlight-slash" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path fill="currentColor" d="M5.1 9.2C13.3-1.2 28.4-3.1 38.8 5.1l592 464c10.4 8.2 12.3 23.3 4.1 33.7s-23.3 12.3-33.7 4.1L9.2 42.9C-1.2 34.7-3.1 19.6 5.1 9.2z"></path></svg>
+      </span>
     </button>
-    <button id="quick-read-toggle" class="quick-tool-btn" title="Mark article as read" aria-label="Mark article as read">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14v16H5z"/><path d="m8 12 2.5 2.5L16 9"/></svg>
+    <div class="quick-tools-divider"></div>
+    <button id="quick-read-toggle" class="quick-tool-btn" title="Mark article as read" aria-label="Mark as Read">
+      <span class="tool-icon-stack read-stack">
+        <svg aria-hidden="true" focusable="false" data-prefix="far" data-icon="newspaper" class="svg-inline--fa fa-newspaper" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M168 80c-13.3 0-24 10.7-24 24l0 304c0 8.4-1.4 16.5-4.1 24L440 432c13.3 0 24-10.7 24-24l0-304c0-13.3-10.7-24-24-24L168 80zM72 480c-39.8 0-72-32.2-72-72L0 112C0 98.7 10.7 88 24 88s24 10.7 24 24l0 296c0 13.3 10.7 24 24 24s24-10.7 24-24l0-304c0-39.8 32.2-72 72-72l272 0c39.8 0 72 32.2 72 72l0 304c0 39.8-32.2 72-72 72L72 480zM176 136c0-13.3 10.7-24 24-24l96 0c13.3 0 24 10.7 24 24l0 80c0 13.3-10.7 24-24 24l-96 0c-13.3 0-24-10.7-24-24l0-80zm200-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24s10.7-24 24-24zm0 80l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24s10.7-24 24-24zM200 272l208 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-208 0c-13.3 0-24-10.7-24-24s10.7-24 24-24zm0 80l208 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-208 0c-13.3 0-24-10.7-24-24s10.7-24 24-24z"></path></svg>
+        <svg aria-hidden="true" focusable="false" data-prefix="far" data-icon="circle-check" class="svg-inline--fa fa-circle-check read-check-badge" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"></path></svg>
+      </span>
     </button>
-    <button id="quick-bookmark-toggle" class="quick-tool-btn" title="Bookmark article" aria-label="Bookmark article">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>
+    <button id="quick-bookmark-toggle" class="quick-tool-btn" title="Bookmark article" aria-label="Bookmark">
+      <svg aria-hidden="true" focusable="false" data-prefix="far" data-icon="bookmark" class="svg-inline--fa fa-bookmark" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path fill="currentColor" d="M0 48C0 21.5 21.5 0 48 0l0 48 0 393.4 130.1-92.9c8.3-6 19.6-6 27.9 0L336 441.4 336 48 48 48 48 0 336 0c26.5 0 48 21.5 48 48l0 440c0 9-5 17.2-13 21.3s-17.6 3.4-24.9-1.8L192 397.5 37.9 507.5c-7.3 5.2-16.9 5.9-24.9 1.8S0 497 0 488L0 48z"></path></svg>
     </button>
   </div>
   <div id="quick-notes-popup" class="quick-notes-popup hidden" aria-label="Quick notes window">
@@ -385,6 +421,34 @@
       <!-- Modal Body -->
       <div class="settings-modal-body" style="padding: 20px 24px; max-height: 70vh; overflow-y: auto;">
         
+        <!-- Section 0: View Mode Selector -->
+        <div style="margin-bottom: 24px;">
+          <h4 style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 15px; height: 15px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Library Interface Mode
+          </h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div id="mode-card-user" class="mode-select-card" style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-weight: 700; font-size: 0.95rem; color: #0f172a;">User Mode</span>
+                <span class="mode-radio-check"></span>
+              </div>
+              <p style="font-size: 0.78rem; color: #64748b; margin: 0; line-height: 1.4;">
+                Clean reading environment. Hides editor paste buttons, folder editing, and deletion controls.
+              </p>
+            </div>
+            <div id="mode-card-admin" class="mode-select-card" style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-weight: 700; font-size: 0.95rem; color: #0f172a;">Admin Mode</span>
+                <span class="mode-radio-check"></span>
+              </div>
+              <p style="font-size: 0.78rem; color: #64748b; margin: 0; line-height: 1.4;">
+                Full management controls. Allows importing, pasting markdown, renaming and deleting folders.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- Section 1: Backup & Package Export/Import -->
         <div style="margin-bottom: 24px;">
           <h4 style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">

@@ -203,9 +203,34 @@ function updateArticleFontSize() {
   }
 }
 
+// View Mode State ('user' | 'admin')
+let viewMode = localStorage.getItem('medical_library_view_mode') || 'user';
+
+function applyViewMode(mode) {
+  viewMode = mode === 'admin' ? 'admin' : 'user';
+  localStorage.setItem('medical_library_view_mode', viewMode);
+  document.body.classList.toggle('user-mode', viewMode === 'user');
+
+  const pill = document.getElementById('footer-mode-pill');
+  const text = document.getElementById('footer-mode-text');
+  if (pill) {
+    pill.className = `footer-mode-pill ${viewMode}`;
+    pill.title = viewMode === 'user' ? 'User Mode (click to switch to Admin)' : 'Admin Mode (click to switch to User)';
+  }
+  if (text) {
+    text.textContent = viewMode === 'user' ? 'User' : 'Admin';
+  }
+
+  const userCard = document.getElementById('mode-card-user');
+  const adminCard = document.getElementById('mode-card-admin');
+  if (userCard) userCard.classList.toggle('active', viewMode === 'user');
+  if (adminCard) adminCard.classList.toggle('active', viewMode === 'admin');
+}
+
 // Local Media Blob Store & Folder Collapse State
 const localBlobStore = new Map();
 const folderCollapseState = new Set();
+let hasInitializedCollapse = false;
 
 // Pan & Zoom State
 let imgZoom = 1.0;
@@ -469,7 +494,15 @@ function showArticleContextMenu(x, y, article) {
     </div>
   `).join('');
 
+  const isRead = !!article.read;
+  const isBm = !!article.bookmarked;
+  const checkSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+  const bmSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="${isBm ? '#f59e0b' : 'none'}" stroke="${isBm ? '#f59e0b' : 'currentColor'}" stroke-width="2" style="width:14px;height:14px;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+
   ctx.innerHTML = `
+    <div class="context-menu-item ctx-toggle-read">${checkSvg} <span>${isRead ? 'Mark as Unread' : 'Mark as Read'}</span></div>
+    <div class="context-menu-item ctx-toggle-bm">${bmSvg} <span>${isBm ? 'Remove Bookmark' : 'Bookmark Article'}</span></div>
+    <div class="context-menu-divider"></div>
     <div class="context-menu-item ctx-rename-art">${editSvg} <span>Rename Article</span></div>
     <div class="context-menu-submenu">
       <div class="context-menu-item">${folderSvg} <span>Move to Folder ▸</span></div>
@@ -479,6 +512,31 @@ function showArticleContextMenu(x, y, article) {
     <div class="context-menu-divider"></div>
     <div class="context-menu-item danger ctx-del-art">${trashSvg} <span>Delete Article</span></div>
   `;
+
+  const toggleReadBtn = ctx.querySelector('.ctx-toggle-read');
+  if (toggleReadBtn) {
+    toggleReadBtn.onclick = async (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      article.read = !article.read;
+      await saveArticles(article);
+      if (window.updateQuickTools) window.updateQuickTools();
+      if (activeArticleId === article.id) displayArticle(article.id);
+      renderSidebar();
+    };
+  }
+
+  const toggleBmBtn = ctx.querySelector('.ctx-toggle-bm');
+  if (toggleBmBtn) {
+    toggleBmBtn.onclick = async (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      article.bookmarked = !article.bookmarked;
+      await saveArticles(article);
+      if (window.updateQuickTools) window.updateQuickTools();
+      renderSidebar();
+    };
+  }
 
   const renameBtn = ctx.querySelector('.ctx-rename-art');
   if (renameBtn) {
@@ -597,6 +655,7 @@ async function init() {
   setupQuickNotes();
   setupScrollSpy();
   setupTextHighlighter();
+  applyViewMode(viewMode);
   renderSidebar();
 
   if (articles.length > 0) {
@@ -954,6 +1013,24 @@ function setupEventListeners() {
   if (footerSettingsBtn) footerSettingsBtn.addEventListener('click', openSettingsModal);
   if (closeSettingsModalBtn) closeSettingsModalBtn.addEventListener('click', closeSettingsModal);
 
+  // Footer Mode Switcher Pill
+  const footerModePill = document.getElementById('footer-mode-pill');
+  if (footerModePill) {
+    footerModePill.addEventListener('click', () => {
+      applyViewMode(viewMode === 'user' ? 'admin' : 'user');
+    });
+  }
+
+  // Settings Modal Mode Cards
+  const modeCardUser = document.getElementById('mode-card-user');
+  const modeCardAdmin = document.getElementById('mode-card-admin');
+  if (modeCardUser) {
+    modeCardUser.addEventListener('click', () => applyViewMode('user'));
+  }
+  if (modeCardAdmin) {
+    modeCardAdmin.addEventListener('click', () => applyViewMode('admin'));
+  }
+
   if (settingsModal) {
     settingsModal.addEventListener('click', (e) => {
       if (shouldCloseModalOnBackdropClick(e, settingsModal)) closeSettingsModal();
@@ -1008,7 +1085,8 @@ function setupEventListeners() {
   if (collapseAllFoldersBtn) {
     collapseAllFoldersBtn.addEventListener('click', () => {
       folders.forEach(f => folderCollapseState.add(f));
-      folderCollapseState.add('⭐ Bookmarks');
+      folderCollapseState.add('Bookmarks');
+      folderCollapseState.add('Read Articles');
       renderSidebar();
     });
   }
@@ -1649,15 +1727,16 @@ function createArticleListItem(article) {
     showArticleContextMenu(e.clientX, e.clientY, article);
   };
 
+  const isRead = !!article.read;
   const rowDiv = document.createElement('div');
-  rowDiv.className = 'article-row-item' + (!isFetched ? ' pending-item' : '');
+  rowDiv.className = 'article-row-item' + (!isFetched ? ' pending-item' : '') + (isRead ? ' is-read' : '');
 
   const titleWrapper = document.createElement('div');
   titleWrapper.className = 'article-title-wrapper';
 
-  const newspaperSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:16px; height:16px; flex-shrink:0; color:#334155;"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>`;
+  const newspaperSvg = `<svg class="svg-icon-sm" viewBox="0 0 24 24" fill="currentColor" style="width:16px; height:16px; flex-shrink:0; color:${isRead ? '#059669' : '#334155'};"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>`;
   const chevronSvg = `<svg class="toc-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-  
+
   if (isActive && isFetched) {
     titleWrapper.innerHTML = `${newspaperSvg}${chevronSvg}<span class="article-title-text">${article.title}</span>`;
   } else {
@@ -1681,6 +1760,20 @@ function createArticleListItem(article) {
     rightBox.appendChild(quickPasteBtn);
   }
 
+  const readBtn = document.createElement('button');
+  readBtn.className = 'article-read-btn' + (isRead ? ' is-read' : '');
+  readBtn.title = isRead ? 'Mark as Unread' : 'Mark as Read';
+  readBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="${isRead ? '#10b981' : '#94a3b8'}" stroke-width="2.2" style="width:15px; height:15px; display:block; cursor:pointer;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+  readBtn.onclick = async (e) => {
+    e.stopPropagation();
+    article.read = !article.read;
+    await saveArticles(article);
+    if (window.updateQuickTools) window.updateQuickTools();
+    if (activeArticleId === article.id) displayArticle(article.id);
+    renderSidebar();
+  };
+  rightBox.appendChild(readBtn);
+
   const isBookmarked = !!article.bookmarked;
   const bookmarkBtn = document.createElement('button');
   bookmarkBtn.className = 'bookmark-btn' + (isBookmarked ? ' is-bookmarked' : '');
@@ -1690,6 +1783,7 @@ function createArticleListItem(article) {
     e.stopPropagation();
     article.bookmarked = !article.bookmarked;
     await saveArticles(article);
+    if (window.updateQuickTools) window.updateQuickTools();
     renderSidebar();
   };
   rightBox.appendChild(bookmarkBtn);
@@ -1914,6 +2008,14 @@ function renderSidebar() {
     if (fn && !fn.includes('${') && !folders.includes(fn)) folders.push(fn);
   });
 
+  // Collapse all folders by default on page load for tidiness
+  if (!hasInitializedCollapse) {
+    hasInitializedCollapse = true;
+    folders.forEach(f => folderCollapseState.add(f));
+    folderCollapseState.add('Bookmarks');
+    folderCollapseState.add('Read Articles');
+  }
+
   if (articles.length === 0) {
     welcomeState.classList.remove('hidden');
     articleContent.classList.add('hidden');
@@ -1942,20 +2044,17 @@ function renderSidebar() {
 
     const bmCard = document.createElement('div');
     bmCard.className = 'sidebar-folder-card' + (isBmCollapsed ? ' collapsed' : '');
-    bmCard.style.borderLeft = '3px solid #f59e0b';
-    bmCard.style.marginBottom = '10px';
 
     const bmHeader = document.createElement('div');
     bmHeader.className = 'sidebar-folder-header';
-    bmHeader.style.background = '#fffbeb';
     bmHeader.innerHTML = `
       <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
-        <svg class="sidebar-bookmark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>
-        <span style="font-weight:700; font-size:0.92rem; color:#b45309;">Bookmarks</span>
-        <span class="folder-count-badge" style="background:#fef3c7; color:#b45309;">${bookmarkedArts.length}</span>
+        <svg class="sidebar-bookmark-icon" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-3-6 3V4z"/></svg>
+        <span>Bookmarks</span>
+        <span class="folder-count-badge">${bookmarkedArts.length}</span>
       </div>
       <div class="folder-actions" style="display:flex; align-items:center; gap:6px;">
-        <span style="display:flex; align-items:center; color:#d97706; transition:transform 0.2s ease; transform: ${isBmCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};">${chevronSvg}</span>
+        <span style="display:flex; align-items:center; color:#94a3b8; transition:transform 0.2s ease; transform: ${isBmCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};">${chevronSvg}</span>
       </div>
     `;
 
@@ -1978,6 +2077,52 @@ function renderSidebar() {
     bmCard.appendChild(bmHeader);
     bmCard.appendChild(bmUl);
     articleFlatList.appendChild(bmCard);
+  }
+
+  // Render pinned Read Articles folder if read articles exist
+  const readArts = articles.filter(a => a.read);
+  if (readArts.length > 0 && !query) {
+    const readFolderName = 'Read Articles';
+    const isReadCollapsed = folderCollapseState.has(readFolderName);
+
+    const readCard = document.createElement('div');
+    readCard.className = 'sidebar-folder-card sidebar-read-card' + (isReadCollapsed ? ' collapsed' : '');
+
+    const readHeader = document.createElement('div');
+    readHeader.className = 'sidebar-folder-header';
+    readHeader.innerHTML = `
+      <div class="sidebar-folder-title" style="display:flex; align-items:center; gap:8px;">
+        <svg class="sidebar-read-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px; height:16px; flex-shrink:0;">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span>Read Articles</span>
+        <span class="folder-count-badge">${readArts.length}</span>
+      </div>
+      <div class="folder-actions" style="display:flex; align-items:center; gap:6px;">
+        <span style="display:flex; align-items:center; color:#94a3b8; transition:transform 0.2s ease; transform: ${isReadCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};">${chevronSvg}</span>
+      </div>
+    `;
+
+    readHeader.onclick = () => {
+      if (folderCollapseState.has(readFolderName)) {
+        folderCollapseState.delete(readFolderName);
+      } else {
+        folderCollapseState.add(readFolderName);
+      }
+      renderSidebar();
+    };
+
+    const readUl = document.createElement('ul');
+    readUl.className = 'folder-article-list' + (isReadCollapsed ? ' hidden' : '');
+
+    readArts.forEach(art => {
+      readUl.appendChild(createArticleListItem(art));
+    });
+
+    readCard.appendChild(readHeader);
+    readCard.appendChild(readUl);
+    articleFlatList.appendChild(readCard);
   }
 
   folders.forEach(folderName => {
@@ -2247,6 +2392,23 @@ function displayArticle(id) {
 
   const isFetched = article.fetched !== false && !!article.markdown;
   articleDate.innerText = isFetched ? `Extracted: ${article.extractedAt || 'Unknown'}` : `Status: Pending Import`;
+
+  const readBadge = document.getElementById('article-read-status-badge');
+  if (readBadge) {
+    const isRead = !!article.read;
+    readBadge.className = 'article-read-status-badge ' + (isRead ? 'is-read' : 'is-unread');
+    readBadge.title = isRead ? 'Marked as read (click to mark unread)' : 'Click to mark article as read';
+    readBadge.innerHTML = isRead
+      ? `<svg class="read-status-icon" viewBox="0 0 512 512" fill="currentColor" style="width: 13px; height: 13px; flex-shrink: 0;"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg><span class="read-status-text">Read</span>`
+      : `<span class="read-status-dot"></span><span class="read-status-text">Mark as read</span>`;
+    readBadge.onclick = async () => {
+      article.read = !article.read;
+      await saveArticles(article);
+      displayArticle(article.id);
+      if (window.updateQuickTools) window.updateQuickTools();
+      renderSidebar();
+    };
+  }
 
   if (!isFetched) {
     articleBody.innerHTML = `
@@ -3531,6 +3693,7 @@ function setupQuickNotes() {
   const status = document.getElementById('quick-notes-status');
   if (!launcher || !toolsDock || !popup || !header || !titleInput || !editor) return;
 
+  // Restore saved notes content
   const saved = localStorage.getItem('medical_library_quick_note');
   if (saved) {
     try {
@@ -3549,43 +3712,96 @@ function setupQuickNotes() {
     if (status) status.textContent = 'Saved in this browser';
   };
 
-  const openNotes = () => {
-    popup.classList.remove('hidden');
-    editor.focus();
-  };
-  launcher.addEventListener('click', openNotes);
-
   const highlightToggle = document.getElementById('quick-highlight-toggle');
   const readToggle = document.getElementById('quick-read-toggle');
   const bookmarkToggle = document.getElementById('quick-bookmark-toggle');
+
   const updateToolState = () => {
+    // 1. Notes Launcher state
+    const isNotesOpen = !popup.classList.contains('hidden');
+    launcher.classList.toggle('is-active', isNotesOpen);
+    launcher.dataset.notesOpen = String(isNotesOpen);
+    launcher.title = isNotesOpen ? 'Close quick notes' : 'Open quick notes';
+
+    // 2. Auto-Highlight state
     if (highlightToggle) {
       highlightToggle.setAttribute('aria-pressed', String(autoHighlightEnabled));
-      highlightToggle.title = `Auto highlight: ${autoHighlightEnabled ? 'on' : 'off'}`;
+      highlightToggle.classList.toggle('is-active', autoHighlightEnabled);
+      highlightToggle.title = `Auto highlight: ${autoHighlightEnabled ? 'ON' : 'OFF'}`;
     }
+
+    // 3. Active Article tools (Read & Bookmark)
     const article = articles.find(item => item.id === activeArticleId);
     if (readToggle) {
-      readToggle.dataset.active = article?.read ? 'true' : 'false';
-      readToggle.title = article?.read ? 'Article marked as read' : 'Mark article as read';
+      if (article) {
+        readToggle.removeAttribute('disabled');
+        const isRead = !!article.read;
+        readToggle.dataset.active = String(isRead);
+        readToggle.classList.toggle('is-read', isRead);
+        readToggle.setAttribute('aria-pressed', String(isRead));
+        readToggle.title = isRead ? 'Article marked as read (click to mark unread)' : 'Mark article as read';
+      } else {
+        readToggle.setAttribute('disabled', 'true');
+        readToggle.classList.remove('is-read');
+        readToggle.dataset.active = 'false';
+        readToggle.title = 'Mark as read (no article open)';
+      }
     }
+
     if (bookmarkToggle) {
-      bookmarkToggle.dataset.active = article?.bookmarked ? 'true' : 'false';
-      bookmarkToggle.title = article?.bookmarked ? 'Remove bookmark' : 'Bookmark article';
+      if (article) {
+        bookmarkToggle.removeAttribute('disabled');
+        const isBm = !!article.bookmarked;
+        bookmarkToggle.dataset.active = String(isBm);
+        bookmarkToggle.classList.toggle('is-bookmarked', isBm);
+        bookmarkToggle.setAttribute('aria-pressed', String(isBm));
+        bookmarkToggle.title = isBm ? 'Bookmarked (click to remove bookmark)' : 'Bookmark article';
+        const bmPath = bookmarkToggle.querySelector('path');
+        if (bmPath) {
+          bmPath.setAttribute('d', isBm
+            ? 'M0 48V487.7C0 496.5 7.4 503.4 16.1 502.8C18.6 502.6 21.1 501.7 23.2 500.2L192 379.6L360.8 500.2C368.1 505.4 378.2 503.7 383.4 496.4C385.1 494 386 491 386 487.7V48C386 21.5 364.5 0 338 0H48C21.5 0 0 21.5 0 48Z'
+            : 'M0 48C0 21.5 21.5 0 48 0l0 48 0 393.4 130.1-92.9c8.3-6 19.6-6 27.9 0L336 441.4 336 48 48 48 48 0 336 0c26.5 0 48 21.5 48 48l0 440c0 9-5 17.2-13 21.3s-17.6 3.4-24.9-1.8L192 397.5 37.9 507.5c-7.3 5.2-16.9 5.9-24.9 1.8S0 497 0 488L0 48z');
+        }
+      } else {
+        bookmarkToggle.setAttribute('disabled', 'true');
+        bookmarkToggle.classList.remove('is-bookmarked');
+        bookmarkToggle.dataset.active = 'false';
+        bookmarkToggle.title = 'Bookmark article (no article open)';
+      }
     }
   };
+
+  // Toggle quick notes popup
+  const toggleNotes = () => {
+    if (popup.classList.contains('hidden')) {
+      popup.classList.remove('hidden');
+      editor.focus();
+    } else {
+      popup.classList.add('hidden');
+    }
+    updateToolState();
+  };
+  launcher.addEventListener('click', toggleNotes);
+
+  // Toggle auto highlight
   highlightToggle?.addEventListener('click', () => {
     autoHighlightEnabled = !autoHighlightEnabled;
     localStorage.setItem('medical_library_auto_highlight', String(autoHighlightEnabled));
     updateToolState();
   });
+
+  // Toggle mark as read
   readToggle?.addEventListener('click', async () => {
     const article = articles.find(item => item.id === activeArticleId);
     if (!article) return;
-    article.read = true;
+    article.read = !article.read;
     await saveArticles(article);
     updateToolState();
+    if (activeArticleId === article.id) displayArticle(article.id);
     renderSidebar();
   });
+
+  // Toggle bookmark
   bookmarkToggle?.addEventListener('click', async () => {
     const article = articles.find(item => item.id === activeArticleId);
     if (!article) return;
@@ -3593,11 +3809,24 @@ function setupQuickNotes() {
     await saveArticles(article);
     updateToolState();
     renderSidebar();
+    if (activeWorkspaceMode === 'bookmarks') renderBookmarksWorkspace();
   });
+
   window.updateQuickTools = updateToolState;
   updateToolState();
+
   titleInput.addEventListener('input', saveNote);
   editor.addEventListener('input', saveNote);
+
+  // Intercept Ctrl+V / Paste to always insert plain unstyled text
+  editor.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain') || '';
+    if (text) {
+      document.execCommand('insertText', false, text);
+    }
+    saveNote();
+  });
 
   popup.querySelectorAll('[data-note-command]').forEach((button) => {
     button.addEventListener('mousedown', (e) => e.preventDefault());
@@ -3628,6 +3857,7 @@ function setupQuickNotes() {
     button.addEventListener('click', () => exportQuickNote(button.dataset.noteExport));
   });
 
+  // Popup draggable and resizable
   makeWindowDraggableAndResizable(
     popup,
     header,
@@ -3638,33 +3868,97 @@ function setupQuickNotes() {
     'Quick notes'
   );
 
-  let dragStartX = 0;
-  let dragStartY = 0;
-  let moved = false;
-  toolsDock.addEventListener('mousedown', (e) => {
-    if (e.target.closest('button')) return;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    moved = false;
-    const rect = toolsDock.getBoundingClientRect();
-    const startLeft = rect.left;
-    const startTop = rect.top;
-    const onMove = (moveEvent) => {
-      const dx = moveEvent.clientX - dragStartX;
-      const dy = moveEvent.clientY - dragStartY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-      if (!moved) return;
-      toolsDock.style.left = `${Math.max(4, Math.min(window.innerWidth - toolsDock.offsetWidth - 4, startLeft + dx))}px`;
-      toolsDock.style.top = `${Math.max(4, Math.min(window.innerHeight - toolsDock.offsetHeight - 4, startTop + dy))}px`;
+  document.getElementById('quick-notes-close-btn')?.addEventListener('click', () => {
+    updateToolState();
+  });
+
+  // --- Robust Floating Toolbar Dragging ---
+  // Restore saved dock position if available
+  try {
+    const savedPos = JSON.parse(localStorage.getItem('medical_library_tools_dock_pos'));
+    if (savedPos && typeof savedPos.left === 'number' && typeof savedPos.top === 'number') {
+      const maxLeft = Math.max(10, window.innerWidth - 60);
+      const maxTop = Math.max(10, window.innerHeight - 50);
+      const left = Math.max(8, Math.min(maxLeft, savedPos.left));
+      const top = Math.max(8, Math.min(maxTop, savedPos.top));
+      toolsDock.style.left = `${left}px`;
+      toolsDock.style.top = `${top}px`;
       toolsDock.style.right = 'auto';
       toolsDock.style.bottom = 'auto';
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    }
+  } catch (e) {}
+
+  let isDraggingDock = false;
+  let dockStartX = 0;
+  let dockStartY = 0;
+  let dockInitialLeft = 0;
+  let dockInitialTop = 0;
+
+  const onPointerDown = (e) => {
+    // If clicking on any interactive button inside the toolbar, allow normal click
+    if (e.target.closest('button')) return;
+
+    isDraggingDock = true;
+    dockStartX = e.clientX;
+    dockStartY = e.clientY;
+    const rect = toolsDock.getBoundingClientRect();
+    dockInitialLeft = rect.left;
+    dockInitialTop = rect.top;
+
+    toolsDock.classList.add('is-dragging');
+    document.body.classList.add('dragging-active');
+    toolsDock.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const onPointerMove = (e) => {
+    if (!isDraggingDock) return;
+    const dx = e.clientX - dockStartX;
+    const dy = e.clientY - dockStartY;
+    const maxLeft = Math.max(8, window.innerWidth - toolsDock.offsetWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - toolsDock.offsetHeight - 8);
+    const newLeft = Math.max(8, Math.min(maxLeft, dockInitialLeft + dx));
+    const newTop = Math.max(8, Math.min(maxTop, dockInitialTop + dy));
+
+    toolsDock.style.left = `${newLeft}px`;
+    toolsDock.style.top = `${newTop}px`;
+    toolsDock.style.right = 'auto';
+    toolsDock.style.bottom = 'auto';
+  };
+
+  const onPointerUp = (e) => {
+    if (!isDraggingDock) return;
+    isDraggingDock = false;
+    toolsDock.classList.remove('is-dragging');
+    document.body.classList.remove('dragging-active');
+    try {
+      toolsDock.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    const rect = toolsDock.getBoundingClientRect();
+    localStorage.setItem('medical_library_tools_dock_pos', JSON.stringify({
+      left: Math.round(rect.left),
+      top: Math.round(rect.top)
+    }));
+  };
+
+  toolsDock.addEventListener('pointerdown', onPointerDown);
+  toolsDock.addEventListener('pointermove', onPointerMove);
+  toolsDock.addEventListener('pointerup', onPointerUp);
+  toolsDock.addEventListener('pointercancel', onPointerUp);
+
+  // Keep dock visible on screen resize
+  window.addEventListener('resize', () => {
+    if (!toolsDock.style.left || toolsDock.style.left === 'auto') return;
+    const rect = toolsDock.getBoundingClientRect();
+    const maxLeft = Math.max(8, window.innerWidth - toolsDock.offsetWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - toolsDock.offsetHeight - 8);
+    const clampedLeft = Math.max(8, Math.min(maxLeft, rect.left));
+    const clampedTop = Math.max(8, Math.min(maxTop, rect.top));
+    if (rect.left !== clampedLeft || rect.top !== clampedTop) {
+      toolsDock.style.left = `${clampedLeft}px`;
+      toolsDock.style.top = `${clampedTop}px`;
+    }
   });
 }
 
