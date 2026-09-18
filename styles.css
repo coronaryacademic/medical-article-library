@@ -2013,7 +2013,6 @@ table.coursology-medical-table td li:last-child {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
-  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.25);
 }
 .quick-notes-popup.maximized {
   top: 12px !important; left: 12px !important; right: auto !important; width: calc(100vw - 24px) !important;
